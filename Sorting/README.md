@@ -28,7 +28,7 @@ The third tool (`dumbSort`) is a very simple C++ implementation that uses the st
 
 To create a binary file called four.dat with 4 records (400 bytes long), run (from the command line)
 
-    ./gensort 400 /tmp/four.dat
+    ./gensort 4 /tmp/four.dat
     
 Note that the file is in the local "tmp" directory, so that we are not cluttering up our home directory. You can check that this file is not sorted (yet) by calling
 

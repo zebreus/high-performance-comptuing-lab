@@ -711,11 +711,9 @@ void gen_ascii_skewed_rec(unsigned char *rec_buf, rand_queue *rq)
     }
 }
 
-
-
-
-static char usage_str[] =
-    "Gensort Sort Input Generator\n"
+void usage(void)
+{
+    fprintf(stderr, "Gensort Sort Input Generator\n"
     "\n"
     "usage: gensort [-a] [-c] [-bSTARTING_REC_NUM] "
 #if defined(SUMP_PUMP)
@@ -758,12 +756,7 @@ static char usage_str[] =
     "\n"
     "You should have received a copy of the GNU General Public License\n"
     "along with this program; if not, write to the Free Software Foundation,\n"
-    "Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.\n"
-    ;
-
-void usage(void)
-{
-    fprintf(stderr, usage_str);
+    "Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.\n");
     fprintf(stderr, "\nVersion %s, cvs $Revision: 1.14 $\n", Version);
     exit(1);
 }

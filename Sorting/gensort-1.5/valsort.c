@@ -250,9 +250,9 @@ FILE *get_input_fp(char *filename)
     return (in);
 }
 
-
-static char usage_str[] =
-    "Valsort Sort Output Validator\n"
+void usage(void)
+{
+    fprintf(stderr,  "Valsort Sort Output Validator\n"
     "\n"
     "usage: valsort [-i] [-q] "
     "[-o SUMMARY_FILE] [-s] FILE_NAME\n"
@@ -294,12 +294,7 @@ static char usage_str[] =
     "\n"
     "You should have received a copy of the GNU General Public License\n"
     "along with this program; if not, write to the Free Software Foundation,\n"
-    "Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.\n"
-    ;
-
-void usage(void)
-{
-    fprintf(stderr, usage_str);
+    "Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.\n");
     fprintf(stderr, "\nVersion %s, cvs $Revision: 1.14 $\n", Version);
     exit(1);
 }

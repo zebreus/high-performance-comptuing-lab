@@ -11,23 +11,19 @@
       with nixpkgs.legacyPackages.${system};
       rec {
         name = "high-performance-computing";
-        packages.nil = nil;
-        packages.clang-tools = clang-tools_16;
-        packages.lldb = llvmPackages_16.lldb;
-        packages.default = 
-           llvmPackages_16.stdenv.mkDerivation {
+        packages.default =
+          llvmPackages_16.stdenv.mkDerivation {
             name = name;
-
             src = ./.;
 
             buildInputs = [
-              packages.clang-tools
-              packages.lldb
               openmpi
               gnumake
               zlib
-              
-              packages.nil
+
+              clang-tools_16
+              lldb
+              nil
             ];
           };
       }

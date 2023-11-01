@@ -1,0 +1,54 @@
+// Contains the fonts. Spectral and Spectral Mono are used for the document text.
+@import './included/fonts.scss';
+// Contains the asciidoctor default stylesheets
+@import './default/index.scss';
+// Contains the default styles for print
+@import './print/index.scss';
+// Contains variables used to configure the other stylesheets
+@import './variables.scss';
+// Contains the included styles that are really specific to this template
+@import './included/index.scss';
+
+// Configure your page
+$page-margin-top: 3.05cm;
+$page-margin-right: (
+    3.86cm - 0.39687cm
+);
+$page-margin-bottom: 3.81cm;
+$page-margin-left: (
+    4.26cm - 0.39687cm
+);
+
+@page {
+    size: A4;
+    margin: $page-margin-top $page-margin-right $page-margin-bottom $page-margin-left ;
+}
+
+@page :first {
+    margin-top: 2.4cm;
+}
+
+
+// Use these to make figures, listings and tables extend over the margins.
+.listingblock,
+.tableblock,
+.imageblock {
+    &.slightly-oversized>.content {
+        margin-right: -($page-margin-right * 0.25);
+        margin-left: -($page-margin-left * 0.25);
+    }
+
+    &.oversized>.content {
+        margin-right: -($page-margin-right * 0.5);
+        margin-left: -($page-margin-left * 0.5);
+    }
+
+    &.completly-oversized>.content {
+        margin-right: -($page-margin-right * 0.75);
+        margin-left: -($page-margin-left * 0.75);
+    }
+}
+
+.imageblock>.content {
+    text-align: center;
+}

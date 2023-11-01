@@ -34,10 +34,27 @@
         "type": "github"
       }
     },
+    "nixpkgs-asciidoc": {
+      "locked": {
+        "lastModified": 1686065153,
+        "narHash": "sha256-0Dqszmgln0a9sNokD47eVseSaP4wQ95iISUQcsZCH+s=",
+        "owner": "zebreus",
+        "repo": "nixpkgs",
+        "rev": "f1a3be7a1160cc4810c0274ab76f0fac813eb4d6",
+        "type": "github"
+      },
+      "original": {
+        "owner": "zebreus",
+        "ref": "f1a3be7a1160cc4810c0274ab76f0fac813eb4d6",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "flake-utils": "flake-utils",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "nixpkgs-asciidoc": "nixpkgs-asciidoc"
       }
     },
     "systems": {

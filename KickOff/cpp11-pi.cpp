@@ -3,79 +3,76 @@
  *  Argonne National Laboratory.
  */
 
-#include <iostream>
+#include <chrono>
 #include <iomanip>
+#include <iostream>
 #include <sstream>
 #include <string>
-#include <vector>
 #include <thread>
-#include <chrono>
+#include <vector>
 // uncomment to disable assert()
 // #define NDEBUG
 #include <cassert>
-#include <cmath> // for fabs()
+#include <cmath>  // for fabs()
 
 // ******************* Utilities
-int string2int( const std::string &text  )
-{
-    std::stringstream    temp( text );
-    int     result = 0xffffffff;
+int string2int(const std::string& text) {
+    std::stringstream temp(text);
+    int result = 0xffffffff;
     temp >> result;
     return result;
-} // end string2int
-
+}  // end string2int
 
 // ******************* Functions for calculating PI (borrowed from mpi)
-double f(double a)
-{
-    return (4.0 / (1.0 + a*a));
-} // end f
+double f(double a) {
+    return (4.0 / (1.0 + a * a));
+}  // end f
 
-const double PI25DT = 3.141592653589793238462643; // No, we're not cheating -this is for testing!
-const long   n = 42l * 1024 * 1024;               // default # of rectangles (42l = long int 42)
-const double h   = 1.0 / (double) n;
+const double PI25DT =
+    3.141592653589793238462643;  // No, we're not cheating -this is for testing!
+const long n =
+    42l * 1024 * 1024;  // default # of rectangles (42l = long int 42)
+const double h = 1.0 / (double)n;
 
-const double maxNumThreads = 1024; // this is only for sanity checking
+const double maxNumThreads = 1024;  // this is only for sanity checking
 
-void pi_thread( int thread_num, int numThreads, double *partial_pi )
-{
-    assert( 0 <= thread_num );
-    assert( thread_num < maxNumThreads );
+void pi_thread(int thread_num, int numThreads, double* partial_pi) {
+    assert(0 <= thread_num);
+    assert(thread_num < maxNumThreads);
     double sum = 0.0;
     /* It would have been better to start from large i and count down, by the way. */
-    for ( long i = thread_num + 1; i <= n; i += numThreads )
-    {
+    for (long i = thread_num + 1; i <= n; i += numThreads) {
         double x = h * ((double)i - 0.5);
         sum += f(x);
     }
     *partial_pi = h * sum;
 
-} // end pi_thread
+}  // end pi_thread
 
 // ******************* main
-int main(int argc,char *argv[])
-{
+int main(int argc, char* argv[]) {
     int numThreads = 0;
 
-    if ( 2 == argc )
-        numThreads = string2int( argv[ 1 ] );
-    else // if number of args illegal
+    if (2 == argc)
+        numThreads = string2int(argv[1]);
+    else  // if number of args illegal
     {
         std::cerr << "Usage: " << argv[0] << " number-of-threads" << std::endl;
-        return( -1 );
-    }; // end argc check
+        return (-1);
+    };  // end argc check
 
-    assert( 0 < numThreads );
-    assert( numThreads <= maxNumThreads );
+    assert(0 < numThreads);
+    assert(numThreads <= maxNumThreads);
 
-    std::chrono::system_clock::time_point startTime = std::chrono::system_clock::now();
+    std::chrono::system_clock::time_point startTime =
+        std::chrono::system_clock::now();
 
-    std::thread threads[ numThreads ]; // Note: No REAL threads yet...
-    double partials[ numThreads ];
+    std::thread threads[numThreads];  // Note: No REAL threads yet...
+    double partials[numThreads];
 
     //Launch the threads
     for (int i = 0; i < numThreads; ++i) {
-        threads[i] = std::thread( pi_thread, i, numThreads, &(partials[i]) );
+        threads[i] = std::thread(pi_thread, i, numThreads, &(partials[i]));
     }
 
     ////Join the threads with the main thread
@@ -85,19 +82,19 @@ int main(int argc,char *argv[])
         pi += partials[i];
     }
 
-
-    std::chrono::system_clock::time_point endTime = std::chrono::system_clock::now();
-    std::chrono::microseconds microRunTime
-         = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
+    std::chrono::system_clock::time_point endTime =
+        std::chrono::system_clock::now();
+    std::chrono::microseconds microRunTime =
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            endTime - startTime
+        );
     double runTime = microRunTime.count() / 1000000.0;
 
-    std::cout << std::setprecision( 16 )
-              << "Pi is approximately " << pi
+    std::cout << std::setprecision(16) << "Pi is approximately " << pi
               << ", Error is " << std::fabs(pi - PI25DT) << std::endl;
-    std::cout << std::setprecision( 8 )
-              << "Wall clock time = " << runTime << " seconds."
-              << std::endl;
-    std::cout << "There were " << numThreads << " threads." << std::endl;              
+    std::cout << std::setprecision(8) << "Wall clock time = " << runTime
+              << " seconds." << std::endl;
+    std::cout << "There were " << numThreads << " threads." << std::endl;
 
     return 0;
 }

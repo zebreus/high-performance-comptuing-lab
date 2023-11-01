@@ -22,17 +22,18 @@
  * Prof. R. C. Moore (ronald.moore@h-da.de).
  */
 
-char *Version = "1.5";
+char* Version = "1.5";
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "rand16.h"
-#include <zlib.h>   /* use crc32() function in zlib */
+#include <zlib.h> /* use crc32() function in zlib */
 
-#define REC_SIZE       100
-#define SKEW_BYTES     6
-#define HEX_DIGIT(x) ((x) >= 10 ? 'A' + (x) - 10 : '0' + (x))
+#include "rand16.h"
+
+#define REC_SIZE 100
+#define SKEW_BYTES 6
+#define HEX_DIGIT(x) ((x) >= 10 ? 'A' + (x)-10 : '0' + (x))
 
 /* Structure for a 10-deep queue of random numbers.  This queue is used
  * to cheaply create records where every byte is psuedo random, while
@@ -43,17 +44,22 @@ char *Version = "1.5";
  * parts.  Each part is generated using subsequent random numbers in the
  * queue xor'ed with a constant that is particular to that part. 
  */
-#define QUEUE_SIZE      10
-#define get_queue_rand(rq, index) (rq->rand[(index + rq->head_index) % QUEUE_SIZE])
-typedef struct
-{
-    int         head_index;             /* index of head of queue in rand[] */
-    u16         curr_rec_number;        /* current record number */
-    u16         rand[QUEUE_SIZE];       /* circular queue of random numbers */
-    int         skew_index;             /* index into key skews; approximately
+#define QUEUE_SIZE 10
+#define get_queue_rand(rq, index) \
+    (rq->rand[(index + rq->head_index) % QUEUE_SIZE])
+
+typedef struct {
+    int head_index; /* index of head of queue in rand[] */
+    u16 curr_rec_number; /* current record number */
+    u16 rand[QUEUE_SIZE]; /* circular queue of random numbers */
+    int skew_index; /* index into key skews; approximately
                                          * log2(current_rec_number) + 1 */
 } rand_queue;
-#define RQ(rq, i) (rq->rand[rq->head_index + i - (rq->head_index + i >= QUEUE_SIZE ? QUEUE_SIZE : 0)])
+
+#define RQ(rq, i) \
+    (rq->rand \
+         [rq->head_index + i \
+          - (rq->head_index + i >= QUEUE_SIZE ? QUEUE_SIZE : 0)])
 #define ASSIGN_10_BYTES(rec_buf, rand) \
     (rec_buf)[0] = (rand.hi8 >> 56) & 0xFF; \
     (rec_buf)[1] = (rand.hi8 >> 48) & 0xFF; \
@@ -61,284 +67,283 @@ typedef struct
     (rec_buf)[3] = (rand.hi8 >> 32) & 0xFF; \
     (rec_buf)[4] = (rand.hi8 >> 24) & 0xFF; \
     (rec_buf)[5] = (rand.hi8 >> 16) & 0xFF; \
-    (rec_buf)[6] = (rand.hi8 >>  8) & 0xFF; \
-    (rec_buf)[7] = (rand.hi8 >>  0) & 0xFF; \
+    (rec_buf)[6] = (rand.hi8 >> 8) & 0xFF; \
+    (rec_buf)[7] = (rand.hi8 >> 0) & 0xFF; \
     (rec_buf)[8] = (rand.lo8 >> 56) & 0xFF; \
     (rec_buf)[9] = (rand.lo8 >> 48) & 0xFF
 
-int         Print_checksum;     /* boolean to produce record checksum */
-u16         Sum16;              /* record checksum */
-void        (*Gen)(unsigned char *buf, rand_queue *rq); /* ptr to generator */
-int         Skip_output;        /* boolean to skip output */
+int Print_checksum; /* boolean to produce record checksum */
+u16 Sum16; /* record checksum */
+void (*Gen)(unsigned char* buf, rand_queue* rq); /* ptr to generator */
+int Skip_output; /* boolean to skip output */
 
 unsigned char Skew_binary[129][SKEW_BYTES] = {
-    /*   0 */ { 0x4a, 0x69, 0x6d, 0x47, 0x72, 0x61 },
-    /*   1 */ { 0x95, 0xe0, 0xe4, 0x82, 0x62, 0xb3 },
-    /*   2 */ { 0x45, 0x97, 0x93, 0x53, 0xdb, 0xed },
-    /*   3 */ { 0x88, 0x2a, 0x02, 0xc3, 0x15, 0x36 },
-    /*   4 */ { 0x5c, 0x90, 0xab, 0x38, 0xae, 0x52 },
-    /*   5 */ { 0x72, 0xdc, 0x0c, 0xa5, 0x1e, 0x33 },
-    /*   6 */ { 0x10, 0x43, 0x1a, 0xf6, 0xa0, 0xd8 },
-    /*   7 */ { 0x5e, 0xfc, 0x4a, 0xbf, 0xac, 0xa2 },
-    /*   8 */ { 0x44, 0xf7, 0x8c, 0x8b, 0x40, 0xbf },
-    /*   9 */ { 0x84, 0xc0, 0x99, 0x2f, 0x3b, 0x94 },
-    /*  10 */ { 0xb3, 0xe9, 0x68, 0x9d, 0xe1, 0x6b },
-    /*  11 */ { 0xf8, 0xf6, 0x42, 0x63, 0xfd, 0x0b },
-    /*  12 */ { 0xda, 0x7a, 0x45, 0xa1, 0x82, 0xde },
-    /*  13 */ { 0x9b, 0x6b, 0x48, 0x25, 0xe2, 0x51 },
-    /*  14 */ { 0xdc, 0x68, 0x2a, 0x00, 0x64, 0x7e },
-    /*  15 */ { 0xf2, 0x5b, 0xd1, 0x54, 0x39, 0xd1 },
-    /*  16 */ { 0xf2, 0xfa, 0x42, 0xed, 0x18, 0x72 },
-    /*  17 */ { 0x6a, 0x59, 0x45, 0x1b, 0xe8, 0xd0 },
-    /*  18 */ { 0x27, 0x29, 0xb9, 0x77, 0x14, 0x71 },
-    /*  19 */ { 0x87, 0x9b, 0x2f, 0xb7, 0xbb, 0x35 },
-    /*  20 */ { 0x68, 0xd0, 0xcc, 0x3c, 0x19, 0x99 },
-    /*  21 */ { 0x27, 0xd8, 0x08, 0x79, 0xd7, 0x9e },
-    /*  22 */ { 0xb0, 0x79, 0x50, 0x11, 0xb7, 0x82 },
-    /*  23 */ { 0x46, 0x4f, 0xb8, 0x4a, 0xb8, 0x48 },
-    /*  24 */ { 0x21, 0xf0, 0x3e, 0xe8, 0xac, 0x41 },
-    /*  25 */ { 0xe7, 0x96, 0x1c, 0x0d, 0x82, 0x7f },
-    /*  26 */ { 0x84, 0xd9, 0x04, 0x45, 0x7a, 0x61 },
-    /*  27 */ { 0x53, 0x59, 0xd3, 0x5d, 0xa8, 0x84 },
-    /*  28 */ { 0x4e, 0x38, 0x54, 0x66, 0x52, 0x5c },
-    /*  29 */ { 0x87, 0x0f, 0xa6, 0x45, 0x90, 0x11 },
-    /*  30 */ { 0xff, 0x00, 0x46, 0x3a, 0xdf, 0xc8 },
-    /*  31 */ { 0x89, 0xca, 0x67, 0xc2, 0x9c, 0x93 },
-    /*  32 */ { 0x75, 0x50, 0x90, 0xc0, 0x17, 0x7d },
-    /*  33 */ { 0xeb, 0x4d, 0x81, 0xa5, 0xc9, 0xea },
-    /*  34 */ { 0x8a, 0x85, 0x68, 0xb3, 0x08, 0x6f },
-    /*  35 */ { 0x5d, 0xa6, 0x9a, 0x3d, 0x86, 0x67 },
-    /*  36 */ { 0x6a, 0x97, 0x43, 0x59, 0xea, 0xab },
-    /*  37 */ { 0x63, 0xb6, 0x04, 0x4b, 0x8e, 0x78 },
-    /*  38 */ { 0x33, 0x41, 0x49, 0x12, 0xcb, 0x67 },
-    /*  39 */ { 0x22, 0x6d, 0xf2, 0xb7, 0x9c, 0x9b },
-    /*  40 */ { 0x1e, 0x58, 0x39, 0x6c, 0x59, 0x9a },
-    /*  41 */ { 0x4d, 0x67, 0x60, 0x91, 0xdc, 0xfe },
-    /*  42 */ { 0xc9, 0x8f, 0x25, 0x9b, 0x15, 0x0d },
-    /*  43 */ { 0xa8, 0x27, 0xdc, 0x9a, 0xff, 0x7e },
-    /*  44 */ { 0x06, 0x96, 0xc9, 0xa1, 0xba, 0x3b },
-    /*  45 */ { 0x6d, 0x16, 0xe3, 0x38, 0xd7, 0x77 },
-    /*  46 */ { 0xac, 0x35, 0xa4, 0x3b, 0xa6, 0x62 },
-    /*  47 */ { 0x7e, 0xe1, 0xe4, 0x00, 0x71, 0x63 },
-    /*  48 */ { 0xa1, 0x6b, 0x6f, 0xa9, 0xf1, 0xea },
-    /*  49 */ { 0x2c, 0xb7, 0xa1, 0xbb, 0x93, 0x62 },
-    /*  50 */ { 0x2f, 0x4b, 0x08, 0x26, 0x7c, 0xe7 },
-    /*  51 */ { 0x86, 0xd1, 0x92, 0xc5, 0x41, 0x84 },
-    /*  52 */ { 0xf6, 0xe4, 0x14, 0x3f, 0xde, 0xaa },
-    /*  53 */ { 0x45, 0x83, 0x69, 0xe8, 0x3c, 0xb9 },
-    /*  54 */ { 0x6c, 0x15, 0xf7, 0x0f, 0x81, 0x76 },
-    /*  55 */ { 0xc0, 0xb4, 0x87, 0x02, 0x6b, 0x7f },
-    /*  56 */ { 0xae, 0x90, 0x31, 0xf8, 0x7d, 0x14 },
-    /*  57 */ { 0x6b, 0x25, 0xdc, 0x59, 0xe0, 0x9e },
-    /*  58 */ { 0x88, 0x38, 0x23, 0x62, 0x42, 0x4b },
-    /*  59 */ { 0xaf, 0xb9, 0x6f, 0x95, 0xd3, 0x2b },
-    /*  60 */ { 0xc1, 0xd4, 0xfc, 0xf5, 0x77, 0xdb },
-    /*  61 */ { 0xc6, 0x8d, 0x66, 0xd1, 0x84, 0x53 },
-    /*  62 */ { 0x74, 0xfe, 0x19, 0xdc, 0x52, 0x68 },
-    /*  63 */ { 0x8b, 0x6a, 0xe0, 0x36, 0x71, 0x3b },
-    /*  64 */ { 0x33, 0xd5, 0xb5, 0xb1, 0x5c, 0x70 },
-    /*  65 */ { 0x5e, 0x46, 0xf5, 0x43, 0x2f, 0x2c },
-    /*  66 */ { 0x26, 0x55, 0x46, 0x25, 0xdd, 0x68 },
-    /*  67 */ { 0xf6, 0xed, 0xf4, 0xe3, 0xba, 0xfd },
-    /*  68 */ { 0xcf, 0x9f, 0xb7, 0x8a, 0xa3, 0xca },
-    /*  69 */ { 0x08, 0x14, 0x09, 0x8c, 0x2d, 0x9a },
-    /*  70 */ { 0xea, 0x1c, 0xfc, 0x70, 0xfb, 0x3f },
-    /*  71 */ { 0x68, 0xed, 0xe8, 0x28, 0xd4, 0xc5 },
-    /*  72 */ { 0x86, 0x67, 0xc9, 0xb9, 0xbb, 0x8c },
-    /*  73 */ { 0xe7, 0xaf, 0xa5, 0x12, 0x6f, 0x3d },
-    /*  74 */ { 0xd0, 0x01, 0x02, 0xa1, 0xc5, 0x10 },
-    /*  75 */ { 0xf9, 0x54, 0x9b, 0x14, 0x3a, 0x9e },
-    /*  76 */ { 0xda, 0x0f, 0x75, 0x54, 0xe7, 0x9e },
-    /*  77 */ { 0xca, 0x16, 0xea, 0x9b, 0x71, 0xf0 },
-    /*  78 */ { 0xf9, 0x5a, 0x03, 0x5a, 0x6b, 0xe8 },
-    /*  79 */ { 0xf3, 0xf0, 0x37, 0x8f, 0x70, 0x43 },
-    /*  80 */ { 0xbb, 0x4d, 0x8a, 0x4f, 0xd7, 0x6c },
-    /*  81 */ { 0xc9, 0x4a, 0x04, 0x75, 0x3d, 0xfc },
-    /*  82 */ { 0x30, 0x9a, 0x89, 0x71, 0x88, 0x29 },
-    /*  83 */ { 0xdd, 0xa5, 0x70, 0x75, 0xdf, 0x7a },
-    /*  84 */ { 0xa6, 0x61, 0xcd, 0xc3, 0x16, 0x22 },
-    /*  85 */ { 0xc5, 0x96, 0x93, 0x15, 0x25, 0x8c },
-    /*  86 */ { 0x3a, 0x16, 0x93, 0xac, 0x95, 0x3b },
-    /*  87 */ { 0xe9, 0x0e, 0x58, 0x7d, 0xf6, 0x9f },
-    /*  88 */ { 0x8f, 0xc9, 0x47, 0x45, 0xb2, 0xfd },
-    /*  89 */ { 0xa7, 0x6f, 0xd6, 0xfc, 0x71, 0x78 },
-    /*  90 */ { 0x4c, 0x67, 0x4c, 0xe2, 0x3a, 0x86 },
-    /*  91 */ { 0xf0, 0x05, 0xc4, 0x06, 0x15, 0x58 },
-    /*  92 */ { 0x2a, 0x90, 0xa6, 0x7e, 0x8c, 0x6c },
-    /*  93 */ { 0x5a, 0xdc, 0xee, 0x8c, 0xa7, 0x09 },
-    /*  94 */ { 0xff, 0x81, 0xed, 0x50, 0xd5, 0x78 },
-    /*  95 */ { 0xed, 0x44, 0x53, 0x6c, 0x44, 0x16 },
-    /*  96 */ { 0x64, 0x8e, 0x48, 0x56, 0x64, 0x1a },
-    /*  97 */ { 0xa4, 0x47, 0x3f, 0x64, 0xf9, 0xd0 },
-    /*  98 */ { 0x6e, 0x45, 0xfb, 0x3d, 0x1c, 0x2c },
-    /*  99 */ { 0x3c, 0xb4, 0x46, 0xe3, 0x07, 0x0c },
-    /* 100 */ { 0x0a, 0x25, 0xa9, 0x9a, 0xf4, 0x39 },
-    /* 101 */ { 0x2c, 0xb5, 0xa1, 0xdc, 0xef, 0x47 },
-    /* 102 */ { 0x0e, 0x4d, 0x9c, 0xd4, 0x57, 0xae },
-    /* 103 */ { 0x3b, 0x86, 0x6f, 0x4a, 0x1a, 0xef },
-    /* 104 */ { 0x3e, 0x98, 0xbe, 0xe5, 0xfd, 0xf5 },
-    /* 105 */ { 0x99, 0x9a, 0x6d, 0x40, 0xa4, 0x3f },
-    /* 106 */ { 0xf7, 0xe8, 0xb4, 0x8b, 0xaa, 0xf9 },
-    /* 107 */ { 0xef, 0xe5, 0x08, 0x20, 0x54, 0x1e },
-    /* 108 */ { 0xf7, 0xd1, 0x98, 0x23, 0x53, 0x67 },
-    /* 109 */ { 0x21, 0xa5, 0x8b, 0xdd, 0x20, 0x20 },
-    /* 110 */ { 0xed, 0x59, 0xb7, 0x23, 0xb1, 0x6e },
-    /* 111 */ { 0x20, 0xd1, 0xef, 0x94, 0x2f, 0x79 },
-    /* 112 */ { 0x8f, 0x23, 0x46, 0xa3, 0x2a, 0xf7 },
-    /* 113 */ { 0xb0, 0x98, 0x61, 0xcc, 0x8b, 0x8a },
-    /* 114 */ { 0xb5, 0xe2, 0x63, 0x33, 0x3a, 0x0d },
-    /* 115 */ { 0x63, 0xc1, 0xb7, 0xe7, 0x2b, 0x41 },
-    /* 116 */ { 0xaf, 0x90, 0x85, 0x9b, 0x1c, 0xa9 },
-    /* 117 */ { 0x9a, 0x52, 0x5e, 0x2f, 0x33, 0xbf },
-    /* 118 */ { 0xc2, 0x83, 0xea, 0x63, 0xf3, 0x00 },
-    /* 119 */ { 0x02, 0x0d, 0xe5, 0x60, 0x00, 0xf6 },
-    /* 120 */ { 0x55, 0xcf, 0xe9, 0xd4, 0x3d, 0x64 },
-    /* 121 */ { 0xb5, 0xd7, 0x69, 0x82, 0x36, 0x39 },
-    /* 122 */ { 0xe6, 0x29, 0xca, 0xb5, 0x3c, 0xa1 },
-    /* 123 */ { 0x9c, 0xbf, 0xeb, 0x07, 0x9d, 0xde },
-    /* 124 */ { 0xa0, 0xba, 0x1e, 0xd1, 0xea, 0x79 },
-    /* 125 */ { 0x0b, 0xe5, 0x49, 0xa5, 0x12, 0xd3 },
-    /* 126 */ { 0x78, 0x70, 0xde, 0x1f, 0xc5, 0x61 },
-    /* 127 */ { 0x98, 0xa2, 0x54, 0x2f, 0xd2, 0x3d },
-    /* 128 */ { 0xe1, 0xdc, 0x46, 0xb6, 0x45, 0xc4 } };
+    /*   0 */ {0x4a, 0x69, 0x6d, 0x47, 0x72, 0x61},
+    /*   1 */ {0x95, 0xe0, 0xe4, 0x82, 0x62, 0xb3},
+    /*   2 */ {0x45, 0x97, 0x93, 0x53, 0xdb, 0xed},
+    /*   3 */ {0x88, 0x2a, 0x02, 0xc3, 0x15, 0x36},
+    /*   4 */ {0x5c, 0x90, 0xab, 0x38, 0xae, 0x52},
+    /*   5 */ {0x72, 0xdc, 0x0c, 0xa5, 0x1e, 0x33},
+    /*   6 */ {0x10, 0x43, 0x1a, 0xf6, 0xa0, 0xd8},
+    /*   7 */ {0x5e, 0xfc, 0x4a, 0xbf, 0xac, 0xa2},
+    /*   8 */ {0x44, 0xf7, 0x8c, 0x8b, 0x40, 0xbf},
+    /*   9 */ {0x84, 0xc0, 0x99, 0x2f, 0x3b, 0x94},
+    /*  10 */ {0xb3, 0xe9, 0x68, 0x9d, 0xe1, 0x6b},
+    /*  11 */ {0xf8, 0xf6, 0x42, 0x63, 0xfd, 0x0b},
+    /*  12 */ {0xda, 0x7a, 0x45, 0xa1, 0x82, 0xde},
+    /*  13 */ {0x9b, 0x6b, 0x48, 0x25, 0xe2, 0x51},
+    /*  14 */ {0xdc, 0x68, 0x2a, 0x00, 0x64, 0x7e},
+    /*  15 */ {0xf2, 0x5b, 0xd1, 0x54, 0x39, 0xd1},
+    /*  16 */ {0xf2, 0xfa, 0x42, 0xed, 0x18, 0x72},
+    /*  17 */ {0x6a, 0x59, 0x45, 0x1b, 0xe8, 0xd0},
+    /*  18 */ {0x27, 0x29, 0xb9, 0x77, 0x14, 0x71},
+    /*  19 */ {0x87, 0x9b, 0x2f, 0xb7, 0xbb, 0x35},
+    /*  20 */ {0x68, 0xd0, 0xcc, 0x3c, 0x19, 0x99},
+    /*  21 */ {0x27, 0xd8, 0x08, 0x79, 0xd7, 0x9e},
+    /*  22 */ {0xb0, 0x79, 0x50, 0x11, 0xb7, 0x82},
+    /*  23 */ {0x46, 0x4f, 0xb8, 0x4a, 0xb8, 0x48},
+    /*  24 */ {0x21, 0xf0, 0x3e, 0xe8, 0xac, 0x41},
+    /*  25 */ {0xe7, 0x96, 0x1c, 0x0d, 0x82, 0x7f},
+    /*  26 */ {0x84, 0xd9, 0x04, 0x45, 0x7a, 0x61},
+    /*  27 */ {0x53, 0x59, 0xd3, 0x5d, 0xa8, 0x84},
+    /*  28 */ {0x4e, 0x38, 0x54, 0x66, 0x52, 0x5c},
+    /*  29 */ {0x87, 0x0f, 0xa6, 0x45, 0x90, 0x11},
+    /*  30 */ {0xff, 0x00, 0x46, 0x3a, 0xdf, 0xc8},
+    /*  31 */ {0x89, 0xca, 0x67, 0xc2, 0x9c, 0x93},
+    /*  32 */ {0x75, 0x50, 0x90, 0xc0, 0x17, 0x7d},
+    /*  33 */ {0xeb, 0x4d, 0x81, 0xa5, 0xc9, 0xea},
+    /*  34 */ {0x8a, 0x85, 0x68, 0xb3, 0x08, 0x6f},
+    /*  35 */ {0x5d, 0xa6, 0x9a, 0x3d, 0x86, 0x67},
+    /*  36 */ {0x6a, 0x97, 0x43, 0x59, 0xea, 0xab},
+    /*  37 */ {0x63, 0xb6, 0x04, 0x4b, 0x8e, 0x78},
+    /*  38 */ {0x33, 0x41, 0x49, 0x12, 0xcb, 0x67},
+    /*  39 */ {0x22, 0x6d, 0xf2, 0xb7, 0x9c, 0x9b},
+    /*  40 */ {0x1e, 0x58, 0x39, 0x6c, 0x59, 0x9a},
+    /*  41 */ {0x4d, 0x67, 0x60, 0x91, 0xdc, 0xfe},
+    /*  42 */ {0xc9, 0x8f, 0x25, 0x9b, 0x15, 0x0d},
+    /*  43 */ {0xa8, 0x27, 0xdc, 0x9a, 0xff, 0x7e},
+    /*  44 */ {0x06, 0x96, 0xc9, 0xa1, 0xba, 0x3b},
+    /*  45 */ {0x6d, 0x16, 0xe3, 0x38, 0xd7, 0x77},
+    /*  46 */ {0xac, 0x35, 0xa4, 0x3b, 0xa6, 0x62},
+    /*  47 */ {0x7e, 0xe1, 0xe4, 0x00, 0x71, 0x63},
+    /*  48 */ {0xa1, 0x6b, 0x6f, 0xa9, 0xf1, 0xea},
+    /*  49 */ {0x2c, 0xb7, 0xa1, 0xbb, 0x93, 0x62},
+    /*  50 */ {0x2f, 0x4b, 0x08, 0x26, 0x7c, 0xe7},
+    /*  51 */ {0x86, 0xd1, 0x92, 0xc5, 0x41, 0x84},
+    /*  52 */ {0xf6, 0xe4, 0x14, 0x3f, 0xde, 0xaa},
+    /*  53 */ {0x45, 0x83, 0x69, 0xe8, 0x3c, 0xb9},
+    /*  54 */ {0x6c, 0x15, 0xf7, 0x0f, 0x81, 0x76},
+    /*  55 */ {0xc0, 0xb4, 0x87, 0x02, 0x6b, 0x7f},
+    /*  56 */ {0xae, 0x90, 0x31, 0xf8, 0x7d, 0x14},
+    /*  57 */ {0x6b, 0x25, 0xdc, 0x59, 0xe0, 0x9e},
+    /*  58 */ {0x88, 0x38, 0x23, 0x62, 0x42, 0x4b},
+    /*  59 */ {0xaf, 0xb9, 0x6f, 0x95, 0xd3, 0x2b},
+    /*  60 */ {0xc1, 0xd4, 0xfc, 0xf5, 0x77, 0xdb},
+    /*  61 */ {0xc6, 0x8d, 0x66, 0xd1, 0x84, 0x53},
+    /*  62 */ {0x74, 0xfe, 0x19, 0xdc, 0x52, 0x68},
+    /*  63 */ {0x8b, 0x6a, 0xe0, 0x36, 0x71, 0x3b},
+    /*  64 */ {0x33, 0xd5, 0xb5, 0xb1, 0x5c, 0x70},
+    /*  65 */ {0x5e, 0x46, 0xf5, 0x43, 0x2f, 0x2c},
+    /*  66 */ {0x26, 0x55, 0x46, 0x25, 0xdd, 0x68},
+    /*  67 */ {0xf6, 0xed, 0xf4, 0xe3, 0xba, 0xfd},
+    /*  68 */ {0xcf, 0x9f, 0xb7, 0x8a, 0xa3, 0xca},
+    /*  69 */ {0x08, 0x14, 0x09, 0x8c, 0x2d, 0x9a},
+    /*  70 */ {0xea, 0x1c, 0xfc, 0x70, 0xfb, 0x3f},
+    /*  71 */ {0x68, 0xed, 0xe8, 0x28, 0xd4, 0xc5},
+    /*  72 */ {0x86, 0x67, 0xc9, 0xb9, 0xbb, 0x8c},
+    /*  73 */ {0xe7, 0xaf, 0xa5, 0x12, 0x6f, 0x3d},
+    /*  74 */ {0xd0, 0x01, 0x02, 0xa1, 0xc5, 0x10},
+    /*  75 */ {0xf9, 0x54, 0x9b, 0x14, 0x3a, 0x9e},
+    /*  76 */ {0xda, 0x0f, 0x75, 0x54, 0xe7, 0x9e},
+    /*  77 */ {0xca, 0x16, 0xea, 0x9b, 0x71, 0xf0},
+    /*  78 */ {0xf9, 0x5a, 0x03, 0x5a, 0x6b, 0xe8},
+    /*  79 */ {0xf3, 0xf0, 0x37, 0x8f, 0x70, 0x43},
+    /*  80 */ {0xbb, 0x4d, 0x8a, 0x4f, 0xd7, 0x6c},
+    /*  81 */ {0xc9, 0x4a, 0x04, 0x75, 0x3d, 0xfc},
+    /*  82 */ {0x30, 0x9a, 0x89, 0x71, 0x88, 0x29},
+    /*  83 */ {0xdd, 0xa5, 0x70, 0x75, 0xdf, 0x7a},
+    /*  84 */ {0xa6, 0x61, 0xcd, 0xc3, 0x16, 0x22},
+    /*  85 */ {0xc5, 0x96, 0x93, 0x15, 0x25, 0x8c},
+    /*  86 */ {0x3a, 0x16, 0x93, 0xac, 0x95, 0x3b},
+    /*  87 */ {0xe9, 0x0e, 0x58, 0x7d, 0xf6, 0x9f},
+    /*  88 */ {0x8f, 0xc9, 0x47, 0x45, 0xb2, 0xfd},
+    /*  89 */ {0xa7, 0x6f, 0xd6, 0xfc, 0x71, 0x78},
+    /*  90 */ {0x4c, 0x67, 0x4c, 0xe2, 0x3a, 0x86},
+    /*  91 */ {0xf0, 0x05, 0xc4, 0x06, 0x15, 0x58},
+    /*  92 */ {0x2a, 0x90, 0xa6, 0x7e, 0x8c, 0x6c},
+    /*  93 */ {0x5a, 0xdc, 0xee, 0x8c, 0xa7, 0x09},
+    /*  94 */ {0xff, 0x81, 0xed, 0x50, 0xd5, 0x78},
+    /*  95 */ {0xed, 0x44, 0x53, 0x6c, 0x44, 0x16},
+    /*  96 */ {0x64, 0x8e, 0x48, 0x56, 0x64, 0x1a},
+    /*  97 */ {0xa4, 0x47, 0x3f, 0x64, 0xf9, 0xd0},
+    /*  98 */ {0x6e, 0x45, 0xfb, 0x3d, 0x1c, 0x2c},
+    /*  99 */ {0x3c, 0xb4, 0x46, 0xe3, 0x07, 0x0c},
+    /* 100 */ {0x0a, 0x25, 0xa9, 0x9a, 0xf4, 0x39},
+    /* 101 */ {0x2c, 0xb5, 0xa1, 0xdc, 0xef, 0x47},
+    /* 102 */ {0x0e, 0x4d, 0x9c, 0xd4, 0x57, 0xae},
+    /* 103 */ {0x3b, 0x86, 0x6f, 0x4a, 0x1a, 0xef},
+    /* 104 */ {0x3e, 0x98, 0xbe, 0xe5, 0xfd, 0xf5},
+    /* 105 */ {0x99, 0x9a, 0x6d, 0x40, 0xa4, 0x3f},
+    /* 106 */ {0xf7, 0xe8, 0xb4, 0x8b, 0xaa, 0xf9},
+    /* 107 */ {0xef, 0xe5, 0x08, 0x20, 0x54, 0x1e},
+    /* 108 */ {0xf7, 0xd1, 0x98, 0x23, 0x53, 0x67},
+    /* 109 */ {0x21, 0xa5, 0x8b, 0xdd, 0x20, 0x20},
+    /* 110 */ {0xed, 0x59, 0xb7, 0x23, 0xb1, 0x6e},
+    /* 111 */ {0x20, 0xd1, 0xef, 0x94, 0x2f, 0x79},
+    /* 112 */ {0x8f, 0x23, 0x46, 0xa3, 0x2a, 0xf7},
+    /* 113 */ {0xb0, 0x98, 0x61, 0xcc, 0x8b, 0x8a},
+    /* 114 */ {0xb5, 0xe2, 0x63, 0x33, 0x3a, 0x0d},
+    /* 115 */ {0x63, 0xc1, 0xb7, 0xe7, 0x2b, 0x41},
+    /* 116 */ {0xaf, 0x90, 0x85, 0x9b, 0x1c, 0xa9},
+    /* 117 */ {0x9a, 0x52, 0x5e, 0x2f, 0x33, 0xbf},
+    /* 118 */ {0xc2, 0x83, 0xea, 0x63, 0xf3, 0x00},
+    /* 119 */ {0x02, 0x0d, 0xe5, 0x60, 0x00, 0xf6},
+    /* 120 */ {0x55, 0xcf, 0xe9, 0xd4, 0x3d, 0x64},
+    /* 121 */ {0xb5, 0xd7, 0x69, 0x82, 0x36, 0x39},
+    /* 122 */ {0xe6, 0x29, 0xca, 0xb5, 0x3c, 0xa1},
+    /* 123 */ {0x9c, 0xbf, 0xeb, 0x07, 0x9d, 0xde},
+    /* 124 */ {0xa0, 0xba, 0x1e, 0xd1, 0xea, 0x79},
+    /* 125 */ {0x0b, 0xe5, 0x49, 0xa5, 0x12, 0xd3},
+    /* 126 */ {0x78, 0x70, 0xde, 0x1f, 0xc5, 0x61},
+    /* 127 */ {0x98, 0xa2, 0x54, 0x2f, 0xd2, 0x3d},
+    /* 128 */ {0xe1, 0xdc, 0x46, 0xb6, 0x45, 0xc4}};
 
 unsigned char Skew_ascii[129][SKEW_BYTES] = {
-    /*   0 */ { 'A', 's', 'f', 'A', 'G', 'H' },
-    /*   1 */ { '~', 's', 'H', 'd', '0', 'j' },
-    /*   2 */ { 'u', 'I', '^', 'E', 'Y', 'm' },
-    /*   3 */ { 'Q', ')', 'J', 'N', ')', 'R' },
-    /*   4 */ { 'o', '4', 'F', 'o', 'B', 'k' },
-    /*   5 */ { '*', '}', '-', 'W', 'z', '1' },
-    /*   6 */ { '0', 'f', 's', 's', 'x', '}' },
-    /*   7 */ { 'm', 'z', '4', 'V', 'C', 'N' },
-    /*   8 */ { 'm', 'y', '+', '=', '5', 'r' },
-    /*   9 */ { '5', 'H', 'A', '\\', 'z', '%' },
-    /*  10 */  { '`', 'P', 'k', 'X', 'Q', '<' },
-    /*  11 */  { 'G', 'L', 'S', 'n', 'l', 'm' },
-    /*  12 */  { 's', 'w', 'B', 'z', 'Q', '#' },
-    /*  13 */  { '9', 'S', 'C', '<', 'z', ' ' },
-    /*  14 */  { 'o', '7', '~', 'd', 'r', 's' },
-    /*  15 */  { 'K', '~', '%', 'q', '4', ']' },
-    /*  16 */  { 'g', 'j', '<', 'm', '5', 'S' },
-    /*  17 */  { '&', '~', '2', 'C', 'h', '{' },
-    /*  18 */  { 'B', ']', 'a', 'z', '\'', '~' },
-    /*  19 */  { ',', '2', 'K', ',', 'D', 'K' },
-    /*  20 */  { '}', '[', 'v', '>', 'z', 'y' },
-    /*  21 */  { 'k', 'X', 'r', 'G', '^', 'e' },
-    /*  22 */  { 'v', '%', '^', 'R', 'G', '^' },
-    /*  23 */  { 'v', 'i', '@', '>', '8', 'j' },
-    /*  24 */  { '}', 'd', 'A', '7', '*', '<' },
-    /*  25 */  { '>', 'Y', '$', 'K', 'c', ')' },
-    /*  26 */  { 'u', 'F', '?', 'T', ';', '*' },
-    /*  27 */  { '~', '%', '.', '@', '@', ',' },
-    /*  28 */  { 'J', 'P', 'r', 'A', 'K', 'c' },
-    /*  29 */  { '*', 'i', '@', 'l', 'F', '3' },
-    /*  30 */  { '9', 'U', 'H', '>', '%', 'F' },
-    /*  31 */  { '-', '^', '1', '~', '=', 'a' },
-    /*  32 */  { '.', '\\', 'K', 'q', 'T', '&' },
-    /*  33 */  { '9', 'R', 't', 's', 'P', 'a' },
-    /*  34 */  { 'F', 'q', 'y', '~', ']', 'O' },
-    /*  35 */  { 'W', 'j', '-', '%', '?', 'e' },
-    /*  36 */  { 'R', 'v', ']', 'Q', 'H', 'o' },
-    /*  37 */  { '1', ' ', 'e', '!', 'o', 'g' },
-    /*  38 */  { 'N', ',', 'g', 'k', '>', '3' },
-    /*  39 */  { 's', '.', '7', '2', 'Y', '.' },
-    /*  40 */  { 'j', '*', '0', '`', 'g', 'c' },
-    /*  41 */  { 'R', '+', 'S', 'h', '=', 'K' },
-    /*  42 */  { 'x', ']', 'w', ']', '=', 'D' },
-    /*  43 */  { 'm', 'a', 'U', '!', 'U', 'o' },
-    /*  44 */  { 's', 'm', 'N', '$', 'i', ' ' },
-    /*  45 */  { 'T', '}', '#', ' ', '`', '9' },
-    /*  46 */  { 'G', '2', 'o', 'M', 'V', 'H' },
-    /*  47 */  { '(', 't', 'v', '1', '\'', '>' },
-    /*  48 */  { 'R', 'E', '%', 'Z', '{', 'o' },
-    /*  49 */  { '\'', '%', ':', 'Y', 'Y', '?' },
-    /*  50 */  { 'N', '(', 'J', 'u', 'G', '%' },
-    /*  51 */  { '`', 'E', '$', ',', 'x', 'R' },
-    /*  52 */  { 'j', 'z', 'u', '$', 'F', 'n' },
-    /*  53 */  { '|', 'x', 'a', 'P', 'O', '\\' },
-    /*  54 */  { 'G', 'C', 'U', '4', 'g', 'f' },
-    /*  55 */  { 'J', 'U', '9', 's', '0', '3' },
-    /*  56 */  { 'D', '@', 'v', '9', '"', '"' },
-    /*  57 */  { 'O', 'f', 'f', 'B', '8', '(' },
-    /*  58 */  { '-', '_', ')', ' ', 'R', '\'' },
-    /*  59 */  { '\'', 'z', '4', 'P', '|', 'n' },
-    /*  60 */  { '[', '!', 'N', 'b', 'x', '&' },
-    /*  61 */  { 'p', '?', '"', '\\', '\\', '6' },
-    /*  62 */  { '+', '2', 'A', '^', 'x', 'P' },
-    /*  63 */  { '-', 'c', 'u', 'J', 'v', 'y' },
-    /*  64 */  { 'i', 'x', '^', 'T', '<', 'S' },
-    /*  65 */  { 'E', 'v', 't', 'L', '^', '`' },
-    /*  66 */  { '\\', 'E', '=', 'u', 'j', '=' },
-    /*  67 */  { 'C', 'U', '7', 'l', '~', '"' },
-    /*  68 */  { ',', 'v', 'W', 'e', '=', '|' },
-    /*  69 */  { 'k', '|', 'M', '.', 'e', 'l' },
-    /*  70 */  { 'u', '<', '#', 'x', '_', 'G' },
-    /*  71 */  { 'K', ' ', '&', '>', 'Q', '-' },
-    /*  72 */  { 'E', '(', 'g', '$', '5', '-' },
-    /*  73 */  { '~', '\\', 'p', 't', 's', 'n' },
-    /*  74 */  { 'Y', 'h', 'l', 'P', 'k', '`' },
-    /*  75 */  { 'W', 'B', 'z', 'u', 'l', ',' },
-    /*  76 */  { 'q', ')', 'e', 'p', 'J', 's' },
-    /*  77 */  { '`', 'W', 'V', 'k', 'W', '&' },
-    /*  78 */  { 'H', 'X', 'g', '#', 'Z', '^' },
-    /*  79 */  { '-', '&', '8', '$', 'l', 'c' },
-    /*  80 */  { '^', 'S', 'p', 'q', 'w', 'o' },
-    /*  81 */  { 'P', '-', '6', 'Y', 'b', 'w' },
-    /*  82 */  { 'a', '`', ':', ';', 'y', 'd' },
-    /*  83 */  { 'd', 'O', ']', 'G', '~', '-' },
-    /*  84 */  { 'W', 'M', '^', ';', 'r', 'v' },
-    /*  85 */  { '-', 'W', 'w', 'U', '4', 'B' },
-    /*  86 */  { 'y', '\'', 'w', '/', 'P', 'Z' },
-    /*  87 */  { '#', 'j', 'A', '`', 'l', '-' },
-    /*  88 */  { ':', '!', 'W', '.', '=', 'v' },
-    /*  89 */  { '"', '!', 'r', '4', 'u', 'g' },
-    /*  90 */  { 'O', '?', '(', '|', '_', 'd' },
-    /*  91 */  { 'x', 'w', 'W', 'R', 'j', 'k' },
-    /*  92 */  { 'T', 'e', ' ', '(', '9', '@' },
-    /*  93 */  { '(', 'c', 'b', '6', '2', '1' },
-    /*  94 */  { 'h', 'g', '5', 'x', ' ', 's' },
-    /*  95 */  { 'w', '5', 'n', 'n', '`', 'w' },
-    /*  96 */  { 'q', 'e', 'Q', 'N', 'o', 'B' },
-    /*  97 */  { '6', 'n', '>', 'i', 'M', 'b' },
-    /*  98 */  { 'u', 'G', 'z', '7', 'S', '=' },
-    /*  99 */  { 'r', 'd', ')', 'x', '<', '>' },
-    /* 100 */  { 'x', 'E', 'w', 'a', '^', ':' },
-    /* 101 */  { '\'', ':', ']', '$', '}', 'b' },
-    /* 102 */  { 'v', 'Z', 'l', '"', 'J', 'i' },
-    /* 103 */  { 'o', '%', ',', '!', 'f', 'S' },
-    /* 104 */  { '*', '+', 'o', '@', '+', 't' },
-    /* 105 */  { '(', 'C', 'o', 'K', 'U', 'h' },
-    /* 106 */  { 'I', '>', ':', '9', 'J', 'Q' },
-    /* 107 */  { 'e', 'S', 'z', 'U', '!', 'X' },
-    /* 108 */  { '[', 'Q', 'Z', '{', 'a', '&' },
-    /* 109 */  { '?', ':', 'Y', 'p', '4', '%' },
-    /* 110 */  { '\'', '_', '>', '/', ' ', '4' },
-    /* 111 */  { 'K', 'r', 'N', 'W', '.', '!' },
-    /* 112 */  { 'j', '1', '7', 'a', '3', 'a' },
-    /* 113 */  { ')', 'o', '-', 'Q', 'L', 'H' },
-    /* 114 */  { 'a', 'l', ';', ':', 'O', 'E' },
-    /* 115 */  { 'I', '@', 'L', '*', '`', 'H' },
-    /* 116 */  { '<', '!', 'p', 'S', 'W', 'F' },
-    /* 117 */  { '1', 'w', '@', 'T', 'Z', 'u' },
-    /* 118 */  { 'V', 'h', '%', '|', 'K', 'i' },
-    /* 119 */  { 'h', '{', 'y', 'd', 'A', 'P' },
-    /* 120 */  { ']', 'V', '9', 'h', 'C', 'o' },
-    /* 121 */  { '.', 'T', 'K', '[', '[', 'l' },
-    /* 122 */  { 'F', 'k', 't', 'H', 's', 'd' },
-    /* 123 */  { 'K', 'i', '|', '$', '-', 'M' },
-    /* 124 */  { '\\', 'g', 'W', 'C', '3', '[' },
-    /* 125 */  { '.', '"', '^', '}', ',', ' ' },
-    /* 126 */  { 'k', ' ', 'V', 'C', '?', 'n' },
-    /* 127 */  { '}', ']', 'K', 'k', '&', ':' },
-    /* 128 */  { '1', '2', 'N', 'S', 'K', '|' } };
-    
+    /*   0 */ {'A', 's', 'f', 'A', 'G', 'H'},
+    /*   1 */ {'~', 's', 'H', 'd', '0', 'j'},
+    /*   2 */ {'u', 'I', '^', 'E', 'Y', 'm'},
+    /*   3 */ {'Q', ')', 'J', 'N', ')', 'R'},
+    /*   4 */ {'o', '4', 'F', 'o', 'B', 'k'},
+    /*   5 */ {'*', '}', '-', 'W', 'z', '1'},
+    /*   6 */ {'0', 'f', 's', 's', 'x', '}'},
+    /*   7 */ {'m', 'z', '4', 'V', 'C', 'N'},
+    /*   8 */ {'m', 'y', '+', '=', '5', 'r'},
+    /*   9 */ {'5', 'H', 'A', '\\', 'z', '%'},
+    /*  10 */ {'`', 'P', 'k', 'X', 'Q', '<'},
+    /*  11 */ {'G', 'L', 'S', 'n', 'l', 'm'},
+    /*  12 */ {'s', 'w', 'B', 'z', 'Q', '#'},
+    /*  13 */ {'9', 'S', 'C', '<', 'z', ' '},
+    /*  14 */ {'o', '7', '~', 'd', 'r', 's'},
+    /*  15 */ {'K', '~', '%', 'q', '4', ']'},
+    /*  16 */ {'g', 'j', '<', 'm', '5', 'S'},
+    /*  17 */ {'&', '~', '2', 'C', 'h', '{'},
+    /*  18 */ {'B', ']', 'a', 'z', '\'', '~'},
+    /*  19 */ {',', '2', 'K', ',', 'D', 'K'},
+    /*  20 */ {'}', '[', 'v', '>', 'z', 'y'},
+    /*  21 */ {'k', 'X', 'r', 'G', '^', 'e'},
+    /*  22 */ {'v', '%', '^', 'R', 'G', '^'},
+    /*  23 */ {'v', 'i', '@', '>', '8', 'j'},
+    /*  24 */ {'}', 'd', 'A', '7', '*', '<'},
+    /*  25 */ {'>', 'Y', '$', 'K', 'c', ')'},
+    /*  26 */ {'u', 'F', '?', 'T', ';', '*'},
+    /*  27 */ {'~', '%', '.', '@', '@', ','},
+    /*  28 */ {'J', 'P', 'r', 'A', 'K', 'c'},
+    /*  29 */ {'*', 'i', '@', 'l', 'F', '3'},
+    /*  30 */ {'9', 'U', 'H', '>', '%', 'F'},
+    /*  31 */ {'-', '^', '1', '~', '=', 'a'},
+    /*  32 */ {'.', '\\', 'K', 'q', 'T', '&'},
+    /*  33 */ {'9', 'R', 't', 's', 'P', 'a'},
+    /*  34 */ {'F', 'q', 'y', '~', ']', 'O'},
+    /*  35 */ {'W', 'j', '-', '%', '?', 'e'},
+    /*  36 */ {'R', 'v', ']', 'Q', 'H', 'o'},
+    /*  37 */ {'1', ' ', 'e', '!', 'o', 'g'},
+    /*  38 */ {'N', ',', 'g', 'k', '>', '3'},
+    /*  39 */ {'s', '.', '7', '2', 'Y', '.'},
+    /*  40 */ {'j', '*', '0', '`', 'g', 'c'},
+    /*  41 */ {'R', '+', 'S', 'h', '=', 'K'},
+    /*  42 */ {'x', ']', 'w', ']', '=', 'D'},
+    /*  43 */ {'m', 'a', 'U', '!', 'U', 'o'},
+    /*  44 */ {'s', 'm', 'N', '$', 'i', ' '},
+    /*  45 */ {'T', '}', '#', ' ', '`', '9'},
+    /*  46 */ {'G', '2', 'o', 'M', 'V', 'H'},
+    /*  47 */ {'(', 't', 'v', '1', '\'', '>'},
+    /*  48 */ {'R', 'E', '%', 'Z', '{', 'o'},
+    /*  49 */ {'\'', '%', ':', 'Y', 'Y', '?'},
+    /*  50 */ {'N', '(', 'J', 'u', 'G', '%'},
+    /*  51 */ {'`', 'E', '$', ',', 'x', 'R'},
+    /*  52 */ {'j', 'z', 'u', '$', 'F', 'n'},
+    /*  53 */ {'|', 'x', 'a', 'P', 'O', '\\'},
+    /*  54 */ {'G', 'C', 'U', '4', 'g', 'f'},
+    /*  55 */ {'J', 'U', '9', 's', '0', '3'},
+    /*  56 */ {'D', '@', 'v', '9', '"', '"'},
+    /*  57 */ {'O', 'f', 'f', 'B', '8', '('},
+    /*  58 */ {'-', '_', ')', ' ', 'R', '\''},
+    /*  59 */ {'\'', 'z', '4', 'P', '|', 'n'},
+    /*  60 */ {'[', '!', 'N', 'b', 'x', '&'},
+    /*  61 */ {'p', '?', '"', '\\', '\\', '6'},
+    /*  62 */ {'+', '2', 'A', '^', 'x', 'P'},
+    /*  63 */ {'-', 'c', 'u', 'J', 'v', 'y'},
+    /*  64 */ {'i', 'x', '^', 'T', '<', 'S'},
+    /*  65 */ {'E', 'v', 't', 'L', '^', '`'},
+    /*  66 */ {'\\', 'E', '=', 'u', 'j', '='},
+    /*  67 */ {'C', 'U', '7', 'l', '~', '"'},
+    /*  68 */ {',', 'v', 'W', 'e', '=', '|'},
+    /*  69 */ {'k', '|', 'M', '.', 'e', 'l'},
+    /*  70 */ {'u', '<', '#', 'x', '_', 'G'},
+    /*  71 */ {'K', ' ', '&', '>', 'Q', '-'},
+    /*  72 */ {'E', '(', 'g', '$', '5', '-'},
+    /*  73 */ {'~', '\\', 'p', 't', 's', 'n'},
+    /*  74 */ {'Y', 'h', 'l', 'P', 'k', '`'},
+    /*  75 */ {'W', 'B', 'z', 'u', 'l', ','},
+    /*  76 */ {'q', ')', 'e', 'p', 'J', 's'},
+    /*  77 */ {'`', 'W', 'V', 'k', 'W', '&'},
+    /*  78 */ {'H', 'X', 'g', '#', 'Z', '^'},
+    /*  79 */ {'-', '&', '8', '$', 'l', 'c'},
+    /*  80 */ {'^', 'S', 'p', 'q', 'w', 'o'},
+    /*  81 */ {'P', '-', '6', 'Y', 'b', 'w'},
+    /*  82 */ {'a', '`', ':', ';', 'y', 'd'},
+    /*  83 */ {'d', 'O', ']', 'G', '~', '-'},
+    /*  84 */ {'W', 'M', '^', ';', 'r', 'v'},
+    /*  85 */ {'-', 'W', 'w', 'U', '4', 'B'},
+    /*  86 */ {'y', '\'', 'w', '/', 'P', 'Z'},
+    /*  87 */ {'#', 'j', 'A', '`', 'l', '-'},
+    /*  88 */ {':', '!', 'W', '.', '=', 'v'},
+    /*  89 */ {'"', '!', 'r', '4', 'u', 'g'},
+    /*  90 */ {'O', '?', '(', '|', '_', 'd'},
+    /*  91 */ {'x', 'w', 'W', 'R', 'j', 'k'},
+    /*  92 */ {'T', 'e', ' ', '(', '9', '@'},
+    /*  93 */ {'(', 'c', 'b', '6', '2', '1'},
+    /*  94 */ {'h', 'g', '5', 'x', ' ', 's'},
+    /*  95 */ {'w', '5', 'n', 'n', '`', 'w'},
+    /*  96 */ {'q', 'e', 'Q', 'N', 'o', 'B'},
+    /*  97 */ {'6', 'n', '>', 'i', 'M', 'b'},
+    /*  98 */ {'u', 'G', 'z', '7', 'S', '='},
+    /*  99 */ {'r', 'd', ')', 'x', '<', '>'},
+    /* 100 */ {'x', 'E', 'w', 'a', '^', ':'},
+    /* 101 */ {'\'', ':', ']', '$', '}', 'b'},
+    /* 102 */ {'v', 'Z', 'l', '"', 'J', 'i'},
+    /* 103 */ {'o', '%', ',', '!', 'f', 'S'},
+    /* 104 */ {'*', '+', 'o', '@', '+', 't'},
+    /* 105 */ {'(', 'C', 'o', 'K', 'U', 'h'},
+    /* 106 */ {'I', '>', ':', '9', 'J', 'Q'},
+    /* 107 */ {'e', 'S', 'z', 'U', '!', 'X'},
+    /* 108 */ {'[', 'Q', 'Z', '{', 'a', '&'},
+    /* 109 */ {'?', ':', 'Y', 'p', '4', '%'},
+    /* 110 */ {'\'', '_', '>', '/', ' ', '4'},
+    /* 111 */ {'K', 'r', 'N', 'W', '.', '!'},
+    /* 112 */ {'j', '1', '7', 'a', '3', 'a'},
+    /* 113 */ {')', 'o', '-', 'Q', 'L', 'H'},
+    /* 114 */ {'a', 'l', ';', ':', 'O', 'E'},
+    /* 115 */ {'I', '@', 'L', '*', '`', 'H'},
+    /* 116 */ {'<', '!', 'p', 'S', 'W', 'F'},
+    /* 117 */ {'1', 'w', '@', 'T', 'Z', 'u'},
+    /* 118 */ {'V', 'h', '%', '|', 'K', 'i'},
+    /* 119 */ {'h', '{', 'y', 'd', 'A', 'P'},
+    /* 120 */ {']', 'V', '9', 'h', 'C', 'o'},
+    /* 121 */ {'.', 'T', 'K', '[', '[', 'l'},
+    /* 122 */ {'F', 'k', 't', 'H', 's', 'd'},
+    /* 123 */ {'K', 'i', '|', '$', '-', 'M'},
+    /* 124 */ {'\\', 'g', 'W', 'C', '3', '['},
+    /* 125 */ {'.', '"', '^', '}', ',', ' '},
+    /* 126 */ {'k', ' ', 'V', 'C', '?', 'n'},
+    /* 127 */ {'}', ']', 'K', 'k', '&', ':'},
+    /* 128 */ {'1', '2', 'N', 'S', 'K', '|'}};
+
 /* init_rand_queue - initialize a queue of random numbers 
  */
-void init_rand_queue(rand_queue *rq, u16 starting_rec_number)
-{
-    int         i;
-    
+void init_rand_queue(rand_queue* rq, u16 starting_rec_number) {
+    int i;
+
     rq->head_index = 0;
     rq->curr_rec_number = starting_rec_number;
     rq->rand[0] = next_rand(skip_ahead_rand(rq->curr_rec_number));
@@ -347,11 +352,9 @@ void init_rand_queue(rand_queue *rq, u16 starting_rec_number)
     rq->skew_index = 0;
 }
 
-
 /* bump_queue - progress random queue to next random number and record number.
  */
-void bump_queue(rand_queue *rq)
-{
+void bump_queue(rand_queue* rq) {
     int tail_index;
 
     /* head_index is the head of the queue.  find the tail index. */
@@ -371,14 +374,12 @@ void bump_queue(rand_queue *rq)
         ++rq->curr_rec_number.hi8;
 }
 
-
 /* gen_rec - generate a "binary" record suitable for all sort
  *              benchmarks *except* PennySort.
  */
-void gen_rec(unsigned char *rec_buf, rand_queue *rq)
-{
-    u16         rand;
-    
+void gen_rec(unsigned char* rec_buf, rand_queue* rq) {
+    u16 rand;
+
     /* generate the 10-byte key using the high 10 bytes of the 1st 128-bit
      * random number
      */
@@ -393,58 +394,66 @@ void gen_rec(unsigned char *rec_buf, rand_queue *rq)
      * compression at the hardware or lower levels of the network protocols.
      */
     rand = RQ(rq, 1);
-    rand.hi8 ^= 0xF0E8E4E2E1D8D4D2LL;   rand.lo8 ^= 0xD1CC000000000000LL;
+    rand.hi8 ^= 0xF0E8E4E2E1D8D4D2LL;
+    rand.lo8 ^= 0xD1CC000000000000LL;
     ASSIGN_10_BYTES(rec_buf + 10, rand);
 
     /* get next 10 bytes using 3rd random number, xor with specific constant
      */
     rand = RQ(rq, 2);
-    rand.hi8 ^= 0xCAC9C6C5C3B8B4B2LL;   rand.lo8 ^= 0xB1AC000000000000LL;
+    rand.hi8 ^= 0xCAC9C6C5C3B8B4B2LL;
+    rand.lo8 ^= 0xB1AC000000000000LL;
     ASSIGN_10_BYTES(rec_buf + 20, rand);
 
     /* get next 10 bytes using 4th random number, xor with specific constant
      */
     rand = RQ(rq, 3);
-    rand.hi8 ^= 0xAAA9A6A5A39C9A99LL;   rand.lo8 ^= 0x9695000000000000LL;
+    rand.hi8 ^= 0xAAA9A6A5A39C9A99LL;
+    rand.lo8 ^= 0x9695000000000000LL;
     ASSIGN_10_BYTES(rec_buf + 30, rand);
 
     /* get next 10 bytes using 5th random number, xor with specific constant
      */
     rand = RQ(rq, 4);
-    rand.hi8 ^= 0x938E8D8B87787472LL;   rand.lo8 ^= 0x716C000000000000LL;
+    rand.hi8 ^= 0x938E8D8B87787472LL;
+    rand.lo8 ^= 0x716C000000000000LL;
     ASSIGN_10_BYTES(rec_buf + 40, rand);
 
     /* get next 10 bytes using 6th random number, xor with specific constant
      */
     rand = RQ(rq, 5);
-    rand.hi8 ^= 0x6A696665635C5A59LL;   rand.lo8 ^= 0x5655000000000000LL;
+    rand.hi8 ^= 0x6A696665635C5A59LL;
+    rand.lo8 ^= 0x5655000000000000LL;
     ASSIGN_10_BYTES(rec_buf + 50, rand);
 
     /* get next 10 bytes using 7th random number, xor with specific constant
      */
     rand = RQ(rq, 6);
-    rand.hi8 ^= 0x534E4D4B473C3A39LL;   rand.lo8 ^= 0x3635000000000000LL;
+    rand.hi8 ^= 0x534E4D4B473C3A39LL;
+    rand.lo8 ^= 0x3635000000000000LL;
     ASSIGN_10_BYTES(rec_buf + 60, rand);
 
     /* get next 10 bytes using 8th random number, xor with specific constant
      */
     rand = RQ(rq, 7);
-    rand.hi8 ^= 0x332E2D2B271E1D1BLL;   rand.lo8 ^= 0x170F000000000000LL;
+    rand.hi8 ^= 0x332E2D2B271E1D1BLL;
+    rand.lo8 ^= 0x170F000000000000LL;
     ASSIGN_10_BYTES(rec_buf + 70, rand);
 
     /* get next 10 bytes using 9th random number, xor with specific constant
      */
     rand = RQ(rq, 8);
-    rand.hi8 ^= 0xC8C4C2C198949291LL;   rand.lo8 ^= 0x8CE0000000000000LL;
+    rand.hi8 ^= 0xC8C4C2C198949291LL;
+    rand.lo8 ^= 0x8CE0000000000000LL;
     ASSIGN_10_BYTES(rec_buf + 80, rand);
 
     /* get last 10 bytes using 10th random number, xor with specific constant
      */
     rand = RQ(rq, 9);
-    rand.hi8 ^= 0x170F332E2D2B271ELL;   rand.lo8 ^= 0x1D1B000000000000LL;
+    rand.hi8 ^= 0x170F332E2D2B271ELL;
+    rand.lo8 ^= 0x1D1B000000000000LL;
     ASSIGN_10_BYTES(rec_buf + 90, rand);
 }
-
 
 /* get_skew_index - get the skew index for the current record number.
  *                  The skew number is the number of bits of relevance
@@ -476,9 +485,8 @@ void gen_rec(unsigned char *rec_buf, rand_queue *rq)
  *                     8000000000000000 0000000000000000   128
  *                     FFFFFFFFFFFFFFFF FFFFFFFFFFFFFFFF   128
  */
-int get_skew_index(rand_queue *rq)
-{
-    int         skew_index;
+int get_skew_index(rand_queue* rq) {
+    int skew_index;
 
     /* Get last skew_index for previous record. Skew_index will be 0 if
      * this is the first record generated by this rand_queue.
@@ -498,27 +506,22 @@ int get_skew_index(rand_queue *rq)
      * generated by this rand_queue), a linear search will need to be done
      * to find the correct skew_index (don't worry, it's logarithmic). 
      */
-    if (rq->curr_rec_number.hi8 == 0)
-    {
+    if (rq->curr_rec_number.hi8 == 0) {
         if (rq->curr_rec_number.lo8 == 0)
             skew_index = 0;
         /* if highest order bit is set */
         else if (rq->curr_rec_number.lo8 & 0xF000000000000000LL)
             skew_index = 64;
-        else
-        {
+        else {
             /* while 2**(skew_index) <= lo8 */
             while (((u8)0x1 << skew_index) <= rq->curr_rec_number.lo8)
                 skew_index++;
         }
-    }
-    else
-    {
+    } else {
         /* if highest order bit is set */
         if (rq->curr_rec_number.hi8 & 0xF000000000000000LL)
             skew_index = 128;
-        else
-        {
+        else {
             if (skew_index < 64)
                 skew_index = 64;
             /* while 2**(skew_index - 64) <= hi8 */
@@ -527,22 +530,20 @@ int get_skew_index(rand_queue *rq)
         }
     }
     /* remember index to speed up index calculation for next possible record */
-    rq->skew_index = skew_index; 
+    rq->skew_index = skew_index;
     return (skew_index);
 }
-
 
 /* gen_skewed_rec - generate a "binary" skewed record suitable for 
  *                  alternate Daytona skewed data test.
  */
-void gen_skewed_rec(unsigned char *rec_buf, rand_queue *rq)
-{
-    int                 skew_index;
-    u16                 rand;
-    unsigned char       mask;
-    unsigned char       *skew_bytes;
-    int                 skew_bits;
-    
+void gen_skewed_rec(unsigned char* rec_buf, rand_queue* rq) {
+    int skew_index;
+    u16 rand;
+    unsigned char mask;
+    unsigned char* skew_bytes;
+    int skew_bits;
+
     /* first generate non-skewed record */
     gen_rec(rec_buf, rq);
 
@@ -553,13 +554,13 @@ void gen_skewed_rec(unsigned char *rec_buf, rand_queue *rq)
      * which may replace the high-order key bytes just generated by gen_rec().
      */
     skew_bytes = Skew_binary[skew_index];
-    
+
     rand = RQ(rq, 0);
 
     /* get an index in the inclusive range 0 - 48 from 6 bits in lo8 */
     skew_bits = (int)(rand.lo8 >> 32) & 0x3F;
     if (skew_bits > 8 * SKEW_BYTES)
-        skew_bits = 0;  /* each rec has 16/64 = .25 chance to not be skewed */
+        skew_bits = 0; /* each rec has 16/64 = .25 chance to not be skewed */
 
     /* replace the high-order "skew_bits" bits in record key with bits from
      * the skew bytes.
@@ -571,8 +572,7 @@ void gen_skewed_rec(unsigned char *rec_buf, rand_queue *rq)
         rec_buf++;
         skew_bytes++;
     }
-    if (skew_bits > 0)
-    {
+    if (skew_bits > 0) {
         /* We know that skew_bits is at least 1 and no more than 7.
          * Replace the high-order "skew_bits" bits with the same bits from
          * the byte pointed to by skew_bytes. Leave the remain bits the same.
@@ -582,17 +582,15 @@ void gen_skewed_rec(unsigned char *rec_buf, rand_queue *rq)
     }
 }
 
-
 /* gen_ascii_rec = generate an ascii record suitable for all sort
  *              benchmarks including PennySort.
  */
-void gen_ascii_rec(unsigned char *rec_buf, rand_queue *rq)
-{
-    int         i;
-    u16         rand = rq->rand[rq->head_index];
-    u16         rec_number = rq->curr_rec_number;
-    u8          temp;
-    
+void gen_ascii_rec(unsigned char* rec_buf, rand_queue* rq) {
+    int i;
+    u16 rand = rq->rand[rq->head_index];
+    u16 rec_number = rq->curr_rec_number;
+    u8 temp;
+
     /* generate the 10-byte ascii key using mostly the high 64 bits.
      */
     temp = rand.hi8;
@@ -620,7 +618,7 @@ void gen_ascii_rec(unsigned char *rec_buf, rand_queue *rq)
     /* add 2 bytes of "break" */
     rec_buf[10] = ' ';
     rec_buf[11] = ' ';
-    
+
     /* convert the 128-bit record number to 32 bits of ascii hexadecimal
      * as the next 32 bytes of the record.
      */
@@ -636,48 +634,46 @@ void gen_ascii_rec(unsigned char *rec_buf, rand_queue *rq)
     rec_buf[45] = ' ';
 
     /* add 52 bytes of filler based on low 48 bits of random number */
-    rec_buf[46] = rec_buf[47] = rec_buf[48] = rec_buf[49] = 
+    rec_buf[46] = rec_buf[47] = rec_buf[48] = rec_buf[49] =
         (unsigned char)(HEX_DIGIT((rand.lo8 >> 48) & 0xF));
-    rec_buf[50] = rec_buf[51] = rec_buf[52] = rec_buf[53] = 
+    rec_buf[50] = rec_buf[51] = rec_buf[52] = rec_buf[53] =
         (unsigned char)(HEX_DIGIT((rand.lo8 >> 44) & 0xF));
-    rec_buf[54] = rec_buf[55] = rec_buf[56] = rec_buf[57] = 
+    rec_buf[54] = rec_buf[55] = rec_buf[56] = rec_buf[57] =
         (unsigned char)(HEX_DIGIT((rand.lo8 >> 40) & 0xF));
-    rec_buf[58] = rec_buf[59] = rec_buf[60] = rec_buf[61] = 
+    rec_buf[58] = rec_buf[59] = rec_buf[60] = rec_buf[61] =
         (unsigned char)(HEX_DIGIT((rand.lo8 >> 36) & 0xF));
-    rec_buf[62] = rec_buf[63] = rec_buf[64] = rec_buf[65] = 
+    rec_buf[62] = rec_buf[63] = rec_buf[64] = rec_buf[65] =
         (unsigned char)(HEX_DIGIT((rand.lo8 >> 32) & 0xF));
-    rec_buf[66] = rec_buf[67] = rec_buf[68] = rec_buf[69] = 
+    rec_buf[66] = rec_buf[67] = rec_buf[68] = rec_buf[69] =
         (unsigned char)(HEX_DIGIT((rand.lo8 >> 28) & 0xF));
-    rec_buf[70] = rec_buf[71] = rec_buf[72] = rec_buf[73] = 
+    rec_buf[70] = rec_buf[71] = rec_buf[72] = rec_buf[73] =
         (unsigned char)(HEX_DIGIT((rand.lo8 >> 24) & 0xF));
-    rec_buf[74] = rec_buf[75] = rec_buf[76] = rec_buf[77] = 
+    rec_buf[74] = rec_buf[75] = rec_buf[76] = rec_buf[77] =
         (unsigned char)(HEX_DIGIT((rand.lo8 >> 20) & 0xF));
-    rec_buf[78] = rec_buf[79] = rec_buf[80] = rec_buf[81] = 
+    rec_buf[78] = rec_buf[79] = rec_buf[80] = rec_buf[81] =
         (unsigned char)(HEX_DIGIT((rand.lo8 >> 16) & 0xF));
-    rec_buf[82] = rec_buf[83] = rec_buf[84] = rec_buf[85] = 
+    rec_buf[82] = rec_buf[83] = rec_buf[84] = rec_buf[85] =
         (unsigned char)(HEX_DIGIT((rand.lo8 >> 12) & 0xF));
-    rec_buf[86] = rec_buf[87] = rec_buf[88] = rec_buf[89] = 
-        (unsigned char)(HEX_DIGIT((rand.lo8 >>  8) & 0xF));
-    rec_buf[90] = rec_buf[91] = rec_buf[92] = rec_buf[93] = 
-        (unsigned char)(HEX_DIGIT((rand.lo8 >>  4) & 0xF));
-    rec_buf[94] = rec_buf[95] = rec_buf[96] = rec_buf[97] = 
-        (unsigned char)(HEX_DIGIT((rand.lo8 >>  0) & 0xF));
+    rec_buf[86] = rec_buf[87] = rec_buf[88] = rec_buf[89] =
+        (unsigned char)(HEX_DIGIT((rand.lo8 >> 8) & 0xF));
+    rec_buf[90] = rec_buf[91] = rec_buf[92] = rec_buf[93] =
+        (unsigned char)(HEX_DIGIT((rand.lo8 >> 4) & 0xF));
+    rec_buf[94] = rec_buf[95] = rec_buf[96] = rec_buf[97] =
+        (unsigned char)(HEX_DIGIT((rand.lo8 >> 0) & 0xF));
 
     /* add 2 bytes of "break" data */
     rec_buf[98] = '\r'; /* nice for Windows */
     rec_buf[99] = '\n';
 }
 
-
 /* gen_ascii_skewed_rec = generate an ascii skewed record suitable for
  *                        alternate Daytona skewed data test.
  */
-void gen_ascii_skewed_rec(unsigned char *rec_buf, rand_queue *rq)
-{
-    int                 skew_index;
-    u16                 rand;
-    unsigned char       *skew_bytes;
-    int                 skew_count;
+void gen_ascii_skewed_rec(unsigned char* rec_buf, rand_queue* rq) {
+    int skew_index;
+    u16 rand;
+    unsigned char* skew_bytes;
+    int skew_count;
 
     /* generate non-skewed record */
     gen_ascii_rec(rec_buf, rq);
@@ -689,7 +685,7 @@ void gen_ascii_skewed_rec(unsigned char *rec_buf, rand_queue *rq)
      * high-order key bytes.
      */
     skew_bytes = Skew_ascii[skew_index];
-    
+
     rand = RQ(rq, 0);
 
     /* get random number in the inclusive range 0 - SKEW_BYTES from
@@ -711,93 +707,88 @@ void gen_ascii_skewed_rec(unsigned char *rec_buf, rand_queue *rq)
     }
 }
 
-void usage(void)
-{
-    fprintf(stderr, "Gensort Sort Input Generator\n"
-    "\n"
-    "usage: gensort [-a] [-c] [-bSTARTING_REC_NUM] "
+void usage(void) {
+    fprintf(
+        stderr,
+        "Gensort Sort Input Generator\n"
+        "\n"
+        "usage: gensort [-a] [-c] [-bSTARTING_REC_NUM] "
 #if defined(SUMP_PUMP)
-    "[-tN] NUM_RECS FILE_NAME[,opts]\n"
+        "[-tN] NUM_RECS FILE_NAME[,opts]\n"
 #else
-    "NUM_RECS FILE_NAME\n"
+        "NUM_RECS FILE_NAME\n"
 #endif
-    "-a        Generate ascii records required for PennySort or JouleSort.\n"
-    "          These records are also an alternative input for the other\n"
-    "          sort benchmarks.  Without this flag, binary records will be\n"
-    "          generated that contain the highest density of randomness in\n"
-    "          the 10-byte key.\n"
-    "-c        Calculate the sum of the crc32 checksums of each of the\n"
-    "          generated records and send it to standard error.\n"
-    "-bN       Set the beginning record generated to N. By default the\n"
-    "          first record generated is record 0.\n"
-    "-s        Generate input records with skewed keys. If used with -a\n"
-    "          option, then skewed ascii records are generated.\n"
-    "NUM_RECS  The number of sequential records to generate.\n"
-    "FILE_NAME The name of the file to write the records to.\n"
-    "\n"
-    "Example 1 - to generate 1000000 ascii records starting at record 0 to\n"
-    "the file named \"pennyinput\":\n"
-    "    gensort -a 1000000 pennyinput\n"
-    "\n"
-    "Example 2 - to generate 1000 binary records beginning with record 2000\n"
-    "to the file named \"partition2\":\n"
-    "    gensort -b2000 1000 partition2\n"
-    "\n"
-    "Copyright (C) 2009 - 2011, Chris Nyberg\n"
-    "\n"
-    "This program is free software; you can redistribute it and/or\n"
-    "modify it under the terms of Version 2 of the GNU General Public\n"
-    "License as published by the Free Software Foundation.\n"
-    "\n"
-    "This program is distributed in the hope that it will be useful,\n"
-    "but WITHOUT ANY WARRANTY; without even the implied warranty of\n"
-    "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n"
-    "GNU General Public License for more details.\n"
-    "\n"
-    "You should have received a copy of the GNU General Public License\n"
-    "along with this program; if not, write to the Free Software Foundation,\n"
-    "Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.\n");
+        "-a        Generate ascii records required for PennySort or JouleSort.\n"
+        "          These records are also an alternative input for the other\n"
+        "          sort benchmarks.  Without this flag, binary records will be\n"
+        "          generated that contain the highest density of randomness in\n"
+        "          the 10-byte key.\n"
+        "-c        Calculate the sum of the crc32 checksums of each of the\n"
+        "          generated records and send it to standard error.\n"
+        "-bN       Set the beginning record generated to N. By default the\n"
+        "          first record generated is record 0.\n"
+        "-s        Generate input records with skewed keys. If used with -a\n"
+        "          option, then skewed ascii records are generated.\n"
+        "NUM_RECS  The number of sequential records to generate.\n"
+        "FILE_NAME The name of the file to write the records to.\n"
+        "\n"
+        "Example 1 - to generate 1000000 ascii records starting at record 0 to\n"
+        "the file named \"pennyinput\":\n"
+        "    gensort -a 1000000 pennyinput\n"
+        "\n"
+        "Example 2 - to generate 1000 binary records beginning with record 2000\n"
+        "to the file named \"partition2\":\n"
+        "    gensort -b2000 1000 partition2\n"
+        "\n"
+        "Copyright (C) 2009 - 2011, Chris Nyberg\n"
+        "\n"
+        "This program is free software; you can redistribute it and/or\n"
+        "modify it under the terms of Version 2 of the GNU General Public\n"
+        "License as published by the Free Software Foundation.\n"
+        "\n"
+        "This program is distributed in the hope that it will be useful,\n"
+        "but WITHOUT ANY WARRANTY; without even the implied warranty of\n"
+        "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n"
+        "GNU General Public License for more details.\n"
+        "\n"
+        "You should have received a copy of the GNU General Public License\n"
+        "along with this program; if not, write to the Free Software Foundation,\n"
+        "Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.\n"
+    );
     fprintf(stderr, "\nVersion %s, cvs $Revision: 1.14 $\n", Version);
     exit(1);
 }
 
+int main(int argc, char* argv[]) {
+    u8 j; /* should be a u16 someday */
+    u16 starting_rec_number;
+    u16 num_recs;
+    unsigned char rec_buf[REC_SIZE];
+    FILE* out;
+    u16 temp16 = {0LL, 0LL};
+    char sumbuf[U16_ASCII_BUF_SIZE];
+    rand_queue rq;
 
-int main(int argc, char *argv[])
-{
-    u8                  j;                      /* should be a u16 someday */
-    u16                 starting_rec_number;
-    u16                 num_recs;
-    unsigned char       rec_buf[REC_SIZE];
-    FILE                *out;
-    u16                 temp16 = {0LL, 0LL};
-    char                sumbuf[U16_ASCII_BUF_SIZE];
-    rand_queue          rq;
-    
     starting_rec_number.hi8 = 0;
     starting_rec_number.lo8 = 0;
     Gen = gen_rec;
 
-    while (argc > 1 && argv[1][0] == '-')
-    {
-        if (argv[1][1] == 'a')
-        {
+    while (argc > 1 && argv[1][0] == '-') {
+        if (argv[1][1] == 'a') {
             if (Gen == gen_rec)
                 Gen = gen_ascii_rec;
             else if (Gen == gen_skewed_rec)
                 Gen = gen_ascii_skewed_rec;
-        }
-        else if (argv[1][1] == 'b')
+        } else if (argv[1][1] == 'b')
             starting_rec_number = dec_to_u16(argv[1] + 2);
         else if (argv[1][1] == 'c')
             Print_checksum = 1;
-        else if (argv[1][1] == 's')
-        {
+        else if (argv[1][1] == 's') {
             if (Gen == gen_rec)
                 Gen = gen_skewed_rec;
             else if (Gen == gen_ascii_rec)
                 Gen = gen_ascii_skewed_rec;
-        }
-        else
+        } else
             usage();
         argc--;
         argv++;
@@ -807,29 +798,26 @@ int main(int argc, char *argv[])
     num_recs = dec_to_u16(argv[1]);
     Skip_output = (strcmp(argv[2], "/dev/null") == 0);
 
-	/* use just this single thread */
-	
-	if ((out = fopen(argv[2], "w")) == NULL)
-	{
-		perror(argv[2]);
-		exit(1);
-	}
-	
-	init_rand_queue(&rq, starting_rec_number);
+    /* use just this single thread */
 
-	for (j = 0; j < num_recs.lo8; j++)
-	{
-		(*Gen)(rec_buf, &rq);
-		if (Print_checksum)
-		{
-			temp16.lo8 = crc32(0, rec_buf, REC_SIZE);
-			Sum16 = add16(Sum16, temp16);
-		}
-		if (!Skip_output)
-			fwrite(rec_buf, REC_SIZE, 1, out);
-		bump_queue(&rq);
-	}
-    
+    if ((out = fopen(argv[2], "w")) == NULL) {
+        perror(argv[2]);
+        exit(1);
+    }
+
+    init_rand_queue(&rq, starting_rec_number);
+
+    for (j = 0; j < num_recs.lo8; j++) {
+        (*Gen)(rec_buf, &rq);
+        if (Print_checksum) {
+            temp16.lo8 = crc32(0, rec_buf, REC_SIZE);
+            Sum16 = add16(Sum16, temp16);
+        }
+        if (!Skip_output)
+            fwrite(rec_buf, REC_SIZE, 1, out);
+        bump_queue(&rq);
+    }
+
     if (Print_checksum)
         fprintf(stderr, "%s\n", u16_to_hex(Sum16, sumbuf));
     return (0);

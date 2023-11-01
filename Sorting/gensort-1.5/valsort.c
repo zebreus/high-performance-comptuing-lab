@@ -18,118 +18,108 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
- /* This file has been simplified for readability (only) by
+/* This file has been simplified for readability (only) by
   * Prof. R. C. Moore (ronald.moore@h-da.de).
   */
-  
-char *Version = "1.5";
+
+char* Version = "1.5";
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <zlib.h>   /* use crc32() function */
+#include <zlib.h> /* use crc32() function */
+
 #include "rand16.h"
 
 #define REC_SIZE 100
 #define SUM_SIZE (sizeof(struct summary))
 
 /* Comparison routine, either memcmp() or strcasecmp() */
-int     (*Compare)(const unsigned char *a, const unsigned char *b, size_t n) =
-    (int (*)(const unsigned char *a, const unsigned char *b, size_t n))memcmp;
-int     Read_summary;    /* Read a file of partition summaries, not records */
-int     Quiet;           /* Quiet mode, don't output diagnostic information */
-int     Multithreaded;   /* boolean indicating if a sump pump is being used */
+int (*Compare)(const unsigned char* a, const unsigned char* b, size_t n) =
+    (int (*)(const unsigned char* a, const unsigned char* b, size_t n))memcmp;
+int Read_summary; /* Read a file of partition summaries, not records */
+int Quiet; /* Quiet mode, don't output diagnostic information */
+int Multithreaded; /* boolean indicating if a sump pump is being used */
 
 /* struct used to summarize a partition of sort output
  */
-struct summary
-{
-    u16             first_unordered;     /* index of first unordered record,
+struct summary {
+    u16 first_unordered; /* index of first unordered record,
                                           * or 0 if no unordered records */
-    u16             unordered_count;     /* total number of unordered records*/
-    u16             rec_count;           /* total number of records */
-    u16             dup_count;           /* total number of duplicate keys */
-    u16             checksum;            /* checksum of all records */
-    unsigned char   first_rec[REC_SIZE]; /* first record */
-    unsigned char   last_rec[REC_SIZE];  /* last record */
+    u16 unordered_count; /* total number of unordered records*/
+    u16 rec_count; /* total number of records */
+    u16 dup_count; /* total number of duplicate keys */
+    u16 checksum; /* checksum of all records */
+    unsigned char first_rec[REC_SIZE]; /* first record */
+    unsigned char last_rec[REC_SIZE]; /* last record */
 };
 
 struct summary Summary;
 
-
 /* next_rec - get the next record to be validated
  *
  */
-unsigned char *next_rec(void *in, unsigned char *rec_buf, struct summary *sum)
-{
-    int                 read_size;
-    unsigned char       *rec = NULL;
-    u16                 temp16 = {0LL, 0LL};
+unsigned char* next_rec(void* in, unsigned char* rec_buf, struct summary* sum) {
+    int read_size;
+    unsigned char* rec = NULL;
+    u16 temp16 = {0LL, 0LL};
 
     read_size = fread(rec_buf, 1, REC_SIZE, in);
     rec = rec_buf;
-    
-    if (read_size == REC_SIZE)
-    {
+
+    if (read_size == REC_SIZE) {
         temp16.lo8 = crc32(0, rec, REC_SIZE);
         sum->checksum = add16(sum->checksum, temp16);
-    }
-    else if (read_size == 0)
+    } else if (read_size == 0)
         return (NULL);
-    else if (read_size < 0)
-    {
+    else if (read_size < 0) {
         fprintf(stderr, "record read error\n");
         exit(1);
-    }
-    else
-    {
+    } else {
         fprintf(stderr, "partial record found at end\n");
         exit(1);
     }
     return (rec);
 }
 
-
 /* summarize_records - summarize the validity of a sequence of records.
  */
-int summarize_records(void *in, void *unused)
-{
-    struct summary      *sum;
-    int                 diff;
-    u16                 one = {0LL, 1LL};
-    unsigned char       *rec;
-    unsigned char       rec_buf[REC_SIZE];
-    unsigned char       prev[REC_SIZE];
-    char                sumbuf[U16_ASCII_BUF_SIZE];
+int summarize_records(void* in, void* unused) {
+    struct summary* sum;
+    int diff;
+    u16 one = {0LL, 1LL};
+    unsigned char* rec;
+    unsigned char rec_buf[REC_SIZE];
+    unsigned char prev[REC_SIZE];
+    char sumbuf[U16_ASCII_BUF_SIZE];
 
     sum = &Summary;
 
-    if ((rec = next_rec(in, rec_buf, sum)) == NULL)
-    {
+    if ((rec = next_rec(in, rec_buf, sum)) == NULL) {
         fprintf(stderr, "there must be at least one record to be validated\n");
         exit(1);
     }
     memcpy(sum->first_rec, rec, REC_SIZE);
     memcpy(prev, rec, REC_SIZE);
     sum->rec_count = add16(sum->rec_count, one);
-    
-    while ((rec = next_rec(in, rec_buf, sum)) != NULL)
-    {
+
+    while ((rec = next_rec(in, rec_buf, sum)) != NULL) {
         /* make sure the record key is equal to or more than the
          * previous key
          */
         diff = (*Compare)(prev, rec, 10);
         if (diff == 0)
             sum->dup_count = add16(sum->dup_count, one);
-        else if (diff > 0)
-        {
-            if (sum->first_unordered.hi8 == 0 &&
-                sum->first_unordered.lo8 == 0)
-            {
+        else if (diff > 0) {
+            if (sum->first_unordered.hi8 == 0
+                && sum->first_unordered.lo8 == 0) {
                 sum->first_unordered = sum->rec_count;
                 if (!Multithreaded && !Quiet)
-                    fprintf(stderr, "First unordered record is record %s\n",
-                            u16_to_dec(sum->first_unordered, sumbuf));
+                    fprintf(
+                        stderr,
+                        "First unordered record is record %s\n",
+                        u16_to_dec(sum->first_unordered, sumbuf)
+                    );
             }
             sum->unordered_count = add16(sum->unordered_count, one);
         }
@@ -137,92 +127,89 @@ int summarize_records(void *in, void *unused)
         sum->rec_count = add16(sum->rec_count, one);
         memcpy(prev, rec, REC_SIZE);
     }
-    memcpy(sum->last_rec, prev, REC_SIZE);  /* set last record for summary */
+    memcpy(sum->last_rec, prev, REC_SIZE); /* set last record for summary */
 
     return (0);
 }
 
-
 /* next_sum - get the next partition summary
  */
-int next_sum(void *in, struct summary *sum)
-{
-    int                 ret;
+int next_sum(void* in, struct summary* sum) {
+    int ret;
 
-    ret = fread(sum, 1, SUM_SIZE, in);           /* get from file */
-    
+    ret = fread(sum, 1, SUM_SIZE, in); /* get from file */
+
     if (ret == 0)
         return (0);
-    else if (ret < 0)
-    {
+    else if (ret < 0) {
         fprintf(stderr, "summary read error\n");
         exit(1);
-    }
-    else if (ret != SUM_SIZE)
-    {
+    } else if (ret != SUM_SIZE) {
         fprintf(stderr, "partial partition summary found at end\n");
         exit(1);
     }
     return (ret);
 }
 
-
 /* sum_summaries - validate a sequence of partition summaries
  */
-void sum_summaries(void *in)
-{
-    int                 diff;
-    u16                 one = {0LL, 1LL};
-    unsigned char       prev[REC_SIZE];
-    char                sumbuf[U16_ASCII_BUF_SIZE];
-    struct summary      local_sum;
+void sum_summaries(void* in) {
+    int diff;
+    u16 one = {0LL, 1LL};
+    unsigned char prev[REC_SIZE];
+    char sumbuf[U16_ASCII_BUF_SIZE];
+    struct summary local_sum;
 
-    if (next_sum(in, &local_sum) == 0)
-    {
+    if (next_sum(in, &local_sum) == 0) {
         fprintf(stderr, "there must be at least one record to be validated\n");
         exit(1);
     }
     memcpy(&Summary, &local_sum, SUM_SIZE);
     memcpy(prev, Summary.last_rec, REC_SIZE);
-    if (Summary.first_unordered.hi8 != 0 ||
-        Summary.first_unordered.lo8 != 0)
-    {
+    if (Summary.first_unordered.hi8 != 0 || Summary.first_unordered.lo8 != 0) {
         if (!Quiet)
-            fprintf(stderr, "First unordered record is record %s\n",
-                    u16_to_dec(Summary.first_unordered, sumbuf));
+            fprintf(
+                stderr,
+                "First unordered record is record %s\n",
+                u16_to_dec(Summary.first_unordered, sumbuf)
+            );
     }
-    
-    while (next_sum(in, &local_sum))
-    {
+
+    while (next_sum(in, &local_sum)) {
         /* make sure the record key is equal to or more than the
          * previous key
          */
         diff = (*Compare)(prev, local_sum.first_rec, 10);
         if (diff == 0)
             Summary.dup_count = add16(Summary.dup_count, one);
-        else if (diff > 0)
-        {
-            if (Summary.first_unordered.hi8 == 0 &&
-                Summary.first_unordered.lo8 == 0)
-            {
+        else if (diff > 0) {
+            if (Summary.first_unordered.hi8 == 0
+                && Summary.first_unordered.lo8 == 0) {
                 if (!Quiet)
-                    fprintf(stderr, "First unordered record is record %s\n",
-                            u16_to_dec(Summary.rec_count, sumbuf));
+                    fprintf(
+                        stderr,
+                        "First unordered record is record %s\n",
+                        u16_to_dec(Summary.rec_count, sumbuf)
+                    );
                 Summary.first_unordered = Summary.rec_count;
             }
             Summary.unordered_count = add16(Summary.unordered_count, one);
         }
 
-        if ((Summary.first_unordered.hi8 == 0 &&
-             Summary.first_unordered.lo8 == 0) &&
-            !(local_sum.first_unordered.hi8 == 0 &&
-              local_sum.first_unordered.lo8 == 0))
-        {
+        if ((Summary.first_unordered.hi8 == 0
+             && Summary.first_unordered.lo8 == 0)
+            && !(
+                local_sum.first_unordered.hi8 == 0
+                && local_sum.first_unordered.lo8 == 0
+            )) {
             Summary.first_unordered =
                 add16(Summary.rec_count, local_sum.first_unordered);
             if (!Quiet)
-                fprintf(stderr, "First unordered record is record %s\n",
-                        u16_to_dec(Summary.first_unordered, sumbuf));
+                fprintf(
+                    stderr,
+                    "First unordered record is record %s\n",
+                    u16_to_dec(Summary.first_unordered, sumbuf)
+                );
         }
 
         Summary.unordered_count =
@@ -235,95 +222,91 @@ void sum_summaries(void *in)
     memcpy(Summary.last_rec, prev, REC_SIZE); /* get last rec of last summary*/
 }
 
-
 /* get_input_fp - get input file pointer by opening input file for reading
  */
-FILE *get_input_fp(char *filename)
-{
-    FILE        *in;
-    
-    if ((in = fopen(filename, "r")) == NULL)
-    {
+FILE* get_input_fp(char* filename) {
+    FILE* in;
+
+    if ((in = fopen(filename, "r")) == NULL) {
         perror(filename);
         exit(1);
     }
     return (in);
 }
 
-void usage(void)
-{
-    fprintf(stderr,  "Valsort Sort Output Validator\n"
-    "\n"
-    "usage: valsort [-i] [-q] "
-    "[-o SUMMARY_FILE] [-s] FILE_NAME\n"
-    "-i        Use case insensitive ascii comparisons (optional for PennySort).\n"
-    "          Case sensitive ascii or binary keys are assumed by default.\n"
-    "-q        Quiet mode, don't output diagnostic text.\n"
-    "-o SUMMARY_FILE  Output a summary of the validated records. This method\n"
-    "          can be used to validate partitioned sort outputs separately.\n"
-    "          The contents of the separate summary files can then be\n"
-    "          concatenated into a single file that can be checked using\n"
-    "          the valsort program with the -s flag.\n"
-    "-s        The file to validate contains partition summaries instead of\n"
-    "          sorted records.\n"
-    "FILE_NAME The name of the sort output file or the partition summaries\n"
-    "          file to validate.\n"
-    "\n"
-    "Example 1 - to validate the sorted order of a single sort output file:\n"
-    "    valsort sortoutputfile\n"
-    "\n"
-    "Example 2 - to validate the sorted order of output that has been\n"
-    "partitioned into 4 output files: out0.dat, out1.dat, out2.dat and out3.dat:\n"
-    "    valsort -o out0.sum out0.dat\n"
-    "    valsort -o out1.sum out1.dat\n"
-    "    valsort -o out2.sum out2.dat\n"
-    "    valsort -o out3.sum out3.dat\n"
-    "    cat out0.sum out1.sum out2.sum out3.sum > all.sum\n"
-    "    valsort -s all.sum\n"
-    "\n"
-    "Copyright (C) 2009 - 2011, Chris Nyberg\n"
-    "\n"
-    "This program is free software; you can redistribute it and/or\n"
-    "modify it under the terms of Version 2 of the GNU General Public\n"
-    "License as published by the Free Software Foundation.\n"
-    "\n"
-    "This program is distributed in the hope that it will be useful,\n"
-    "but WITHOUT ANY WARRANTY; without even the implied warranty of\n"
-    "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n"
-    "GNU General Public License for more details.\n"
-    "\n"
-    "You should have received a copy of the GNU General Public License\n"
-    "along with this program; if not, write to the Free Software Foundation,\n"
-    "Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.\n");
+void usage(void) {
+    fprintf(
+        stderr,
+        "Valsort Sort Output Validator\n"
+        "\n"
+        "usage: valsort [-i] [-q] "
+        "[-o SUMMARY_FILE] [-s] FILE_NAME\n"
+        "-i        Use case insensitive ascii comparisons (optional for PennySort).\n"
+        "          Case sensitive ascii or binary keys are assumed by default.\n"
+        "-q        Quiet mode, don't output diagnostic text.\n"
+        "-o SUMMARY_FILE  Output a summary of the validated records. This method\n"
+        "          can be used to validate partitioned sort outputs separately.\n"
+        "          The contents of the separate summary files can then be\n"
+        "          concatenated into a single file that can be checked using\n"
+        "          the valsort program with the -s flag.\n"
+        "-s        The file to validate contains partition summaries instead of\n"
+        "          sorted records.\n"
+        "FILE_NAME The name of the sort output file or the partition summaries\n"
+        "          file to validate.\n"
+        "\n"
+        "Example 1 - to validate the sorted order of a single sort output file:\n"
+        "    valsort sortoutputfile\n"
+        "\n"
+        "Example 2 - to validate the sorted order of output that has been\n"
+        "partitioned into 4 output files: out0.dat, out1.dat, out2.dat and out3.dat:\n"
+        "    valsort -o out0.sum out0.dat\n"
+        "    valsort -o out1.sum out1.dat\n"
+        "    valsort -o out2.sum out2.dat\n"
+        "    valsort -o out3.sum out3.dat\n"
+        "    cat out0.sum out1.sum out2.sum out3.sum > all.sum\n"
+        "    valsort -s all.sum\n"
+        "\n"
+        "Copyright (C) 2009 - 2011, Chris Nyberg\n"
+        "\n"
+        "This program is free software; you can redistribute it and/or\n"
+        "modify it under the terms of Version 2 of the GNU General Public\n"
+        "License as published by the Free Software Foundation.\n"
+        "\n"
+        "This program is distributed in the hope that it will be useful,\n"
+        "but WITHOUT ANY WARRANTY; without even the implied warranty of\n"
+        "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n"
+        "GNU General Public License for more details.\n"
+        "\n"
+        "You should have received a copy of the GNU General Public License\n"
+        "along with this program; if not, write to the Free Software Foundation,\n"
+        "Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.\n"
+    );
     fprintf(stderr, "\nVersion %s, cvs $Revision: 1.14 $\n", Version);
     exit(1);
 }
 
+int main(int argc, char* argv[]) {
+    FILE* in;
+    char sumbuf[U16_ASCII_BUF_SIZE];
+    FILE* out = NULL;
 
-int main(int argc, char *argv[])
-{
-    FILE                *in;
-    char                sumbuf[U16_ASCII_BUF_SIZE];
-    FILE                *out = NULL;
-    
-    while (argc > 1 && argv[1][0] == '-')
-    {
+    while (argc > 1 && argv[1][0] == '-') {
         if (argv[1][1] == 'i')
-            Compare =
-                (int (*)(const unsigned char *a, const unsigned char *b, size_t n))strcasecmp;
-        else if (argv[1][1] == 'o')
-        {
+            Compare = (int (*)(
+                const unsigned char* a,
+                const unsigned char* b,
+                size_t n
+            ))strcasecmp;
+        else if (argv[1][1] == 'o') {
             if (argc < 4 || argv[2][0] == '-')
                 usage();
-            if ((out = fopen(argv[2], "w")) == NULL)
-            {
+            if ((out = fopen(argv[2], "w")) == NULL) {
                 perror(argv[2]);
                 exit(1);
             }
             argc--;
             argv++;
-        }
-        else if (argv[1][1] == 'q')
+        } else if (argv[1][1] == 'q')
             Quiet = 1;
         else if (argv[1][1] == 's')
             Read_summary = 1;
@@ -337,14 +320,12 @@ int main(int argc, char *argv[])
 
     /* if we are validating output partition summaries
      */
-    if (Read_summary)
-    {
+    if (Read_summary) {
         in = get_input_fp(argv[1]);
         sum_summaries(in);
     }
     /* else we are validating a file with records in sorted order */
-    else
-    {
+    else {
         /* else validate the order of records with using only main thread */
         in = get_input_fp(argv[1]);
         summarize_records(in, NULL);
@@ -354,25 +335,25 @@ int main(int argc, char *argv[])
     if (out != NULL)
         fwrite(&Summary, SUM_SIZE, 1, out);
 
-    if (!Quiet)
-    {
-        fprintf(stderr, "Records: %s\n",
-                u16_to_dec(Summary.rec_count, sumbuf));
-        fprintf(stderr, "Checksum: %s\n",
-                u16_to_hex(Summary.checksum, sumbuf));
-        if (Summary.unordered_count.hi8 | Summary.unordered_count.lo8)
-        {
-            fprintf(stderr, "ERROR - there are %s unordered records\n",
-                    u16_to_dec(Summary.unordered_count, sumbuf));
-        }
-        else
-        {
-            fprintf(stderr, "Duplicate keys: %s\n",
-                    u16_to_dec(Summary.dup_count, sumbuf));
+    if (!Quiet) {
+        fprintf(stderr, "Records: %s\n", u16_to_dec(Summary.rec_count, sumbuf));
+        fprintf(stderr, "Checksum: %s\n", u16_to_hex(Summary.checksum, sumbuf));
+        if (Summary.unordered_count.hi8 | Summary.unordered_count.lo8) {
+            fprintf(
+                stderr,
+                "ERROR - there are %s unordered records\n",
+                u16_to_dec(Summary.unordered_count, sumbuf)
+            );
+        } else {
+            fprintf(
+                stderr,
+                "Duplicate keys: %s\n",
+                u16_to_dec(Summary.dup_count, sumbuf)
+            );
             fprintf(stderr, "SUCCESS - all records are in order\n");
         }
     }
-    
+
     /* return non-zero if there are any unordered records */
     return (Summary.unordered_count.hi8 | Summary.unordered_count.lo8) ? 1 : 0;
 }

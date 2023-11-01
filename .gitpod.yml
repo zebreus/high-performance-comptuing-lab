@@ -1,7 +1,8 @@
 tasks:
   - init: |
-      nix-env -i nil
-      nix-env -i clang-tools
+      nix profile install .#nil
+      nix profile install .#clang-tools
+      nix profile install .#lldb
       mkdir -p /home/gitpod/.config/nix &&
       echo 'sandbox = false' >> /home/gitpod/.config/nix/nix.conf
       nix develop
@@ -9,3 +10,5 @@ tasks:
 vscode:
   extensions:
     - jnoortheen.nix-ide
+    - vadimcn.vscode-lldb
+    - llvm-vs-code-extensions.vscode-clangd

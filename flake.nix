@@ -17,6 +17,7 @@
             src = ./.;
 
             buildInputs = [
+              llvmPackages_16.openmp
               openmpi
               gnumake
               zlib

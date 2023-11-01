@@ -7,8 +7,8 @@
 # Alternatives Compilers:
 # CC = g++7
 # CC = g++8
-CC = g++
-# CC = clang++ 
+# CC = g++
+CC = clang++ 
 # CC = c++
 
 CFLAGS=-Wall -O3

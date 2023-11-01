@@ -7,11 +7,11 @@
 
 # Choose a C++ and a C Compiler!
 # Ether gnu compiler chain (gcc):
-C++ = g++
-CC = gcc
+# C++ = g++
+# CC = gcc
 # Or clang / LLVM:
-# C++ = clang++
-# CC = clang
+C++ = clang++
+CC = clang
 # Or whatever is the default on your system:
 # C++ = c++
 # CC = cc

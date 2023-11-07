@@ -17,7 +17,7 @@
 CMatrix::CMatrix(const char* filename) {
     width = 0;
     height = 0;
-    FILE* pFile = NULL;
+    FILE* pFile = nullptr;
     double value = 0.0;
     unsigned int i = 0;
 
@@ -76,7 +76,7 @@ CMatrix& CMatrix::operator=(const CMatrix& rhs) {
 // Destructor
 CMatrix::~CMatrix() {
     delete[] container;
-    container = NULL;
+    container = nullptr;
 }
 
 // Output

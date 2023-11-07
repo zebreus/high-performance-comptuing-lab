@@ -9,7 +9,7 @@
 #include <assert.h>
 
 // some helper
-void printError(const char* progname, const char* error = NULL);
+void printError(const char* progname, const char* error = nullptr);
 
 class CMatrix {
   public:

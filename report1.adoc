@@ -35,59 +35,21 @@ Darmstadt University of Applied Sciences
 Faculty of Computer Science
 
 [discrete#main-title]
-= Report
-
-[.description.text-center]
-Lab report for the first high-performance computing exercise
+= Lab report for the first high-performance computing exercise
 
 [.presented-by.text-center]
 by +
 ****REMOVED**** ***REMOVED*** +
 *Björn* XXXXXX
 
-<<<
-
-[discrete]
-== Abstract
-// A summary of the contents in English of about one page. The following
-// points should be addressed in particular:
-
-// * Motivation: Why did this work come about? Why is the topic of the
-// work interesting (for the general public)? The motivation should be
-// abstracted as far as possible from the specific tasks that may be given
-// by a company.
-// * Content: What is the content of this thesis? What exactly is covered in
-// the thesis? The methodology and working method should be briefly
-// discussed here.
-// * Results: What are the results of this work? A brief overview of the
-// Most actual results as a teaser to read the complete thesis.
-
-
-// Generated with chatgpt
-This document presents the Asciidoctor.js thesis template, which offers a versatile and easily understandable alternative to traditional typesetting systems for scientific writing. The template leverages the flexibility of web technologies, allowing seamless design modifications and rendering of PDF and website versions of the thesis. The source document structure resembles markdown, enhancing its readability. This abstract provides an overview of the template's benefits, getting started instructions, toolchain details, customization options using JavaScript, integration of source code listings and syntax highlighting, philosophical considerations behind the design decisions, and a comprehensive guide to using the template's features for scientific writing. Overall, the Asciidoctor.js thesis template provides a user-friendly and efficient approach for creating scientific theses, offering enhanced readability and ease of customization compared to traditional typesetting systems.
 
 // The table of contents gets inserted here.
 toc::[]
 
-// This generates the tables for listings, figures, and tables
-// If you do not need all of them, just modify that file.
-
-<<<
-
-// Start with section and part numbering
 :part-signifier: Part
-:sectnums:
 :listing-caption: Listing
-:partnums:
 
-// Main part starts here
-[.reset-pages]
-= Report
-
-== Introduction
-
-Scientific writing plays a vital role in conveying research findings and academic knowledge. As traditional typesetting systems for scientific documents can be complex, there is a growing interest in alternative approaches that prioritize flexibility, readability, and ease of use. The Asciidoctor.js thesis template offers a comprehensive framework for creating well-structured and visually appealing theses. By leveraging web technologies, this template allows for seamless design modifications and facilitates the generation of PDF and website versions. In this introduction, we will explore the key features, benefits, and practical considerations of the Asciidoctor.js thesis template, highlighting its potential to revolutionize scientific writing.
-// Thx chatgpt
+== Intro
 
 == Figures, tables, and listings
 
@@ -310,109 +272,6 @@ This template is by no means perfect; there are still some things that could be 
 
 The template could also be adjusted to work well with Asciidoctor slides, but I have not tried that yet. Thanks for reading to the end, have a nice day and a cookie 🍪.
 
-[glossary]
-== List of abbreviations
-// Abbreviations from here will automatically be linked to the document
-
-// Abbreviations in random order and links to read more about them
-[glossary]
-[[FPGA]]FPGA:: Field-Programmable Gate Array link:pass:[https://en.wikipedia.org/wiki/Field-programmable_gate_array][🔗^]
-[[HLS]]HLS:: High-Level Synthesis link:pass:[https://en.wikipedia.org/wiki/High-level_synthesis][🔗^]
-[[LLVM_IR]]LLVM IR:: LLVM Intermediate Representation link:pass:[https://en.wikipedia.org/wiki/LLVM#Intermediate_representation][🔗^]
-[[RAII]]RAII:: Resource Acquisition Is Initialization / Scope-Bound Resource Management link:pass:[https://en.wikipedia.org/wiki/Resource_acquisition_is_initialization][🔗^]
-
-[bibliography]
-== References
-
-// Citation style:
-// Line 1: All authors' full first and last names. Commas separate Authors.
-// Line 2: Title in italics.
-// Line 3: Journal/Conference name or any other information about what gives the source credibility.
-// Line 4: doi with attached hyperlink. For digital editions, also link the PDF with a 📁 icon
-// +Authors seperated by commas+
-
-// Multiple HLS tools use LLVM
-// C/Cpp are the most popular languages for HLS
-// NOTE: I focused on FPGA descriptions
-// Clock frequency scaling in CPU stalled around 2005
-// A alternative approach for high-throughput and energy-efficient processing is to use specific accelerators
-// Specialized accelerators are hard to design and program
-// RTL requires advanced hardware expertise
-// RTL specifies cycle-by-cycle behavior explicitly
-// RTL is a low-level abstraction
-// RTL leads to longer development times
-// FPGAs with HLS can reduce that.
-// FPGAs are configurable integrated circuits
-// Most FPGAs are reconfigurable
-// FPGA vendors provide toolchains to synthesize HTL to bitstream
-// bitstream gets programmed to the FPGA
-// HLS tools start from an HLL and automatically produce a circuit specification in RTL
-// HLS offers to enable software engineers to benefit from the performance and energy efficiency of hardware without having hardware expertise
-// HLS tools enable hardware engineers to design systems faster
-// HLS tools enable hardware engineers to explore the design space rapidly
-// Microsoft uses FPGAs to accelerate Bing search
-* [[[Nan16]]]
-+Razvan Nane, Vlad-Mihai Sima, Christian Pilato, Jongsok Choi, Blair Fort, Andrew Canis, Yu Ting Chen, Hsuan Hsiao, Stephen Brown, Fabrizio Ferrandi, Jason Anderson, Koen Bertels+ +
-_A Survey and Evaluation of FPGA High-Level Synthesis Tools_ +
-IEEE Transactions on Computer-Aided Design of Integrated Circuits and Systems +
-link:pass:[https://doi.org/10.1109/tcad.2015.2513673][10.1109/tcad.2015.2513673^]
-link:pass:[https://sci-hub.st/10.1109/tcad.2015.2513673][📁^]
-
-// Bambu provides a research environment to experiment with new ideas across HLS, high-level verification, and debugging.
-// Bambu input: standard C/{cpp} specifications, LLVM IR, IRs from GCC
-// Includes many optimizations
-// Makes it easy to integrate new transformations and optimizations
-// Is open-source
-// Bambu is a command line tool
-// Supports most C/{cpp} constructs
-// Bambu has three phases. frontend, middleend and backend
-// Frontend: Uses Clang or gcc
-// Uses a compiler plugin for both extracting the call graph and control flow information
-// Builds its own static single assignment IR
-// This decouples the compiler front end from the rest of the HLS process.
-// Vivado HLS has a frontend based on Clang
-* [[[Fer21]]]
-+Fabrizio Ferrandi, Vito Giovanni Castellana, Serena Curzel, Pietro Fezzardi, Michele Fiorito, Marco Lattuada, Marco Minutoli, Christian Pilato, Antonino Tumeo+ +
-_Invited: Bambu: an Open-Source Research Framework for the High-Level Synthesis of Complex Applications_ +
-ACM/IEEE Design Automation Conference +
-link:pass:[https://doi.org/10.1109/DAC18074.2021.9586110][10.1109/DAC18074.2021.9586110^]
-link:pass:[https://re.public.polimi.it/retrieve/668507/dac21_bambu.pdf][📁^]
-
-// SystemVerilog is the de facto standard for RTL design
-* [[[Soz22]]]
-+Emanuele Del Sozzo, Davide Conficconi, Alberto Zeni, Mirko Salaris, Donatella Sciuto, Marco D. Santambrogio+ +
-_Pushing the level of abstraction of digital system design: A survey on how to program FPGAs_ +
-ACM Computing Surveys +
-link:pass:[https://doi.org/10.1145/3532989][10.1145/3532989^]
-link:pass:[https://re.public.polimi.it/retrieve/e3b8d0bb-125b-4457-9780-250f72ef7a02/Survey_FPGA_CSUR.pdf][📁^]
-
-// Rust is the most loved language of 2016
-* [[[Sta16]]]
-+Stack Overflow+ +
-_Stack Overflow Developer Survey 2016_ +
-[Online; accessed 5.7.23] +
-link:pass:[https://insights.stackoverflow.com/survey/2016/][insights.stackoverflow.com/survey/2016^]
-
-// Rust is the most loved language of 2020
-* [[[Sta20]]]
-+Stack Overflow+ +
-_Stack Overflow Developer Survey 2020_ +
-[Online; accessed 5.7.23] +
-link:pass:[https://insights.stackoverflow.com/survey/2020/][insights.stackoverflow.com/survey/2020^]
-
-// Rust is the most loved language of 2023
-* [[[Sta23]]]
-+Stack Overflow+ +
-_Stack Overflow Developer Survey 2023_ +
-[Online; accessed 5.7.23] +
-link:pass:[https://survey.stackoverflow.co/2023/][survey.stackoverflow.co/2023^]
-
-* [[[Kla23]]]
-+Steve Klabnik, Carol Nichols+ +
-_The Rust programming language_ +
-[Online; accessed 5.7.23] +
-link:pass:[https://doc.rust-lang.org/stable/book/][doc.rust-lang.org/stable/book^]
-
 == Appendix
 
 
@@ -423,16 +282,3 @@ include::assets/long_rust_listing.rs[]
 ----
 
 include::scripts/trailing-scripts.adoc[]
-
-// Final checklist:
-// * are all abbreviations defined?
-// * are all abbreviations linked to Wikipedia (or somewhere else)?
-// * are all references used?
-// * are all references linked to the correct source?
-// * are all TODOs processed?
-// * are the names for things consistent?
-// * check for broken references
-// * archive.org all links
-// * Check for duplication of information
-// * oxford comma
-// * You should have read the paper at least once from top to bottom.

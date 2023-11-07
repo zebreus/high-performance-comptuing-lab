@@ -1,6 +1,7 @@
 PWD = $(shell pwd)
 ASCIIDOCTOR     = asciidoctor -r asciidoctor-kroki
 ASCIIDOCTOR_WEB_PDF = asciidoctor-web-pdf -r asciidoctor-kroki
+PYTHON = python3
 
 TARGETS += $(TARGETS_WITHOUT_HTML) index.html
 TARGETS_WITHOUT_HTML += $(PROCESSED_CHARTS) $(wildcard scripts/*.adoc)
@@ -11,10 +12,8 @@ PROCESSED_CHARTS = $(addprefix processed-assets/,$(notdir $(VEGA_CHART_FILES)))
 
 .EXTRA_PREREQS:=Makefile
 .PHONY: all pdf preview
-all: reports
-reports: report1.pdf
-preview: paper.adoc paper.css $(TARGETS_WITHOUT_HTML) $(PROCESSED_CHARTS)
-	$(ASCIIDOCTOR_WEB_PDF) paper.adoc -o paper.pdf --preview
+all: paper.pdf
+preview: paper-preview
 
 SCSS_FILES = $(wildcard styles/*.scss) $(wildcard styles/*/*.scss) $(wildcard styles/*/*/*.scss)
 
@@ -25,7 +24,7 @@ paper.css: $(SCSS_FILES)
 	$(ASCIIDOCTOR) -S unsafe $< -o $@
 
 %-web-preview: %.html
-	xdg-open $<
+	$(PYTHON) scripts/serve.py $<
 
 %.pdf: %.adoc paper.css $(TARGETS_WITHOUT_HTML) $(PROCESSED_CHARTS)
 	$(ASCIIDOCTOR_WEB_PDF) $< -o $@

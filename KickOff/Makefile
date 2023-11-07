@@ -74,7 +74,8 @@ openMP-pi.o: openMP-pi.cpp
 openMP-pi: openMP-pi.o
 	$(C++) $(LDFLAGS) -fopenmp -o $@ $^
 
-NUM_THREADS = 4
+NUM_THREADS = $(shell grep -E 'core id' /proc/cpuinfo | sort | uniq | wc -l)
+# Get the number of physical cores to not need to edit after every commit/push/pull
 
 tests: all
 ifeq (, $(shell which srun)) # When srun is not available, assume we want to run locally

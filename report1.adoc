@@ -49,7 +49,34 @@ toc::[]
 :part-signifier: Part
 :listing-caption: Listing
 
-== Intro
+== Techstack
+
+[cols="1,2,2"]
+|===
+|
+|Lennart
+|Björn 
+
+|CPU
+|i9-11950H @ 2.6GHz
+|i5-7200U @ 2.5GHz
+
+|CPU-Kerne / Threads
+|8 / 16
+|2 / 4
+
+|GPU
+|RTX3070 mobile
+|Intel HD Graphics 620
+
+|OS
+|Nix OS unstable/latest - 64 Bit
+|Ubuntu 23.04 - 64 Bit
+
+|RAM (GB)
+|32
+|8
+|=== 
 
 == Figures, tables, and listings
 

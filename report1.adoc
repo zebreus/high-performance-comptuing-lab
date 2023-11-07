@@ -78,7 +78,7 @@ toc::[]
 |8
 |=== 
 
-== Figures, tables, and listings
+== Auswertung 
 
 Figures, tables, and listings are automatically numbered and added to their respective list after the table of contents.
 

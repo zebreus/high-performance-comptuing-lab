@@ -31,7 +31,7 @@ double f(double a) {
 const double PI25DT =
     3.141592653589793238462643;  // No, we're not cheating -this is for testing!
 const long n =
-    42l * 1024 * 1024;  // default # of rectangles (42l = long int 42)
+    500l * 1024 * 1024;  // default # of rectangles (42l = long int 42)
 const double h = 1.0 / (double)n;
 
 const double maxNumThreads = 1024;  // this is only for sanity checking

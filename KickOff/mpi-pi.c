@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
 
     if (0 == myid) {
         startwtime = MPI_Wtime();
-        n = 42l * 1024 * 1024; /* default # of rectangles (42l = long int 42) */
+        n = 500l * 1024 * 1024; /* default # of rectangles (42l = long int 42) */
     };
 
     MPI_Bcast(&n, 1, MPI_LONG_INT, 0, MPI_COMM_WORLD);

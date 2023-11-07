@@ -80,5 +80,7 @@ int main(int argc, char* argv[]) {
               << " seconds." << std::endl;
     std::cout << "There were " << numThreads << " threads." << std::endl;
 
+    std::cerr << runTime << std::flush;
+
     return 0;
 }

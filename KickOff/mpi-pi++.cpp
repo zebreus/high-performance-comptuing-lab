@@ -6,6 +6,7 @@
 #include <chrono>
 #include <iomanip>
 #include <iostream>
+#include <fstream>
 #include <sstream>
 #include <string>
 // uncomment to disable assert()
@@ -82,7 +83,11 @@ int main(int argc, char* argv[]) {
         std::cout << "Wall clock time = " << (endwtime - startwtime)
                   << " seconds." << std::endl;
         std::cout << "There were " << numprocs << " processes." << std::endl;
+
+        std::cerr << (endwtime - startwtime) << std::flush;
     }
+
+
 
     MPI_Finalize();
 

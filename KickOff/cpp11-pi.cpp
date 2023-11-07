@@ -95,6 +95,6 @@ int main(int argc, char* argv[]) {
     std::cout << std::setprecision(8) << "Wall clock time = " << runTime
               << " seconds." << std::endl;
     std::cout << "There were " << numThreads << " threads." << std::endl;
-
+    std::cerr << runTime << std::flush;
     return 0;
 }

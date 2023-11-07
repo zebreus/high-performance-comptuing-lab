@@ -66,6 +66,8 @@ int main(int argc, char* argv[]) {
             fabs(pi - PI25DT)
         );
         printf("Wall clock time = %.8f seconds.\n", (endwtime - startwtime));
+        fprintf(stderr, "%.8f", (endwtime - startwtime));
+        fflush(stderr);
         fflush(stdout);
     }
 

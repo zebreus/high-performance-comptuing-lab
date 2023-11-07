@@ -40,7 +40,7 @@ Faculty of Computer Science
 [.presented-by.text-center]
 by +
 ****REMOVED**** ***REMOVED*** +
-*Björn* XXXXXX
+****REMOVED**** ***REMOVED***
 
 
 // The table of contents gets inserted here.

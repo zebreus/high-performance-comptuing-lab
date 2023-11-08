@@ -15,6 +15,27 @@ PROCESSED_CHARTS = $(addprefix processed-assets/,$(notdir $(VEGA_CHART_FILES)))
 all: paper.pdf
 preview: paper-preview
 
+.PRECIOUS: KickOff/results_gcc.csv KickOff/results_clang.csv
+
+KickOff/results_gcc.csv:
+	cd KickOff && make clean
+	cd KickOff && make CXX=g++ CC=gcc
+	cd KickOff && make benchmark
+	cp KickOff/results.csv KickOff/results_gcc.csv
+
+KickOff/results_clang.csv:
+	cd KickOff && make clean
+	cd KickOff && make CXX=clang++ CC=clang
+	cd KickOff && make benchmark
+	cp KickOff/results.csv KickOff/results_clang.csv
+
+KICKOFF_DATA_TARGETS = assets/compiler-comparison.csv assets/mpi-cpp.csv assets/implementation-comparison-fixed-n.csv assets/implementation-comparison-fixed-threads.csv
+
+$(KICKOFF_DATA_TARGETS) : KickOff/results_gcc.csv KickOff/results_clang.csv scripts/collect_data.ts
+	deno run -A scripts/collect_data.ts
+
+data-kickoff: $(KICKOFF_DATA_TARGETS)
+
 SCSS_FILES = $(wildcard styles/*.scss) $(wildcard styles/*/*.scss) $(wildcard styles/*/*/*.scss)
 
 paper.css: $(SCSS_FILES)

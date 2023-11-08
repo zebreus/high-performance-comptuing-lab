@@ -1,0 +1,82 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Different compilers (threads=8, mean of implementations)",
+  "config": {
+    "font": "Spectral, sans-serif"
+  },
+  "autosize": "fit",
+  "width": 500,
+  "height": 300,
+  "data": {
+    "url": "./compiler-comparison.csv"
+  },
+  "encoding": {
+    "x": {
+      "field": "n",
+      "type": "quantitative",
+      "sort": "ascending",
+      "title": "Problem size (n)",
+      "scale": {
+        "type": "log",
+        "base": 2,
+        "nice": true
+      }
+    },
+    "y": {
+      "field": "duration",
+      "type": "quantitative",
+      "scale": {
+        "type": "log",
+        "base": 2,
+        "nice": true
+      }
+    },
+    "color": {
+      "field": "compiler",
+      "title": "Compiler",
+      "type": "nominal"
+    },
+    "opacity": {
+      "condition": {
+        "param": "selectedCompiler",
+        "value": 0.1
+      },
+      "value": 0.01
+    }
+  },
+  "layer": [
+    {
+      "mark": { "type": "line", "tooltip": true, "point": "transparent" },
+      "encoding": {
+        "y": {
+          "field": "duration",
+          "aggregate": "mean",
+          "title": "Mean duration (seconds)"
+        },
+        "opacity": {
+          "condition": {
+            "param": "selectedCompiler",
+            "value": 1
+          },
+          "value": 0.5
+        }
+      }
+    },
+    {
+      "mark": { "type": "point" },
+      "params": [
+        {
+          "name": "selectedCompiler",
+          "select": {
+            "type": "point",
+            "fields": [
+              "compiler"
+            ],
+            "on": "click"
+          },
+          "bind": "legend"
+        }
+      ]
+    }
+  ]
+}

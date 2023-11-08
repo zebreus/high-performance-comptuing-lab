@@ -23,6 +23,7 @@
 
             buildInputs = [
               llvmPackages_16.openmp
+              gcc
               openmpi
               gnumake
               zlib
@@ -32,6 +33,7 @@
               nil
 
               pkgs-with-asciidoc.python3
+              pkgs-with-asciidoc.deno
               pkgs-with-asciidoc.asciidoctor-web-pdf
               pkgs-with-asciidoc.asciidoctor-js
               pkgs-with-asciidoc.sass

@@ -2,6 +2,7 @@
   "recommendations": [
     "ms-vscode.cpptools",
     "jnoortheen.nix-ide",
-    "asciidoctor.asciidoctor-vscode"
+    "asciidoctor.asciidoctor-vscode",
+    "denoland.vscode-deno"
   ]
 }

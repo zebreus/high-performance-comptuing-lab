@@ -30,11 +30,11 @@ double f(double a) {
 
 const double PI25DT =
     3.141592653589793238462643;  // No, we're not cheating -this is for testing!
-const long n =
-    500l * 1024 * 1024;  // default # of rectangles (42l = long int 42)
-const double h = 1.0 / (double)n;
 
 const double maxNumThreads = 1024;  // this is only for sanity checking
+
+long n;
+double h;
 
 void pi_thread(int thread_num, int numThreads, double* partial_pi) {
     assert(0 <= thread_num);
@@ -53,11 +53,13 @@ void pi_thread(int thread_num, int numThreads, double* partial_pi) {
 int main(int argc, char* argv[]) {
     int numThreads = 0;
 
-    if (2 == argc)
+    if (3 == argc) {
         numThreads = string2int(argv[1]);
-    else  // if number of args illegal
+        n = string2int(argv[2]) * 1024l * 1024l;
+        h = 1.0 / (double)n;
+    } else  // if number of args illegal
     {
-        std::cerr << "Usage: " << argv[0] << " number-of-threads" << std::endl;
+        std::cerr << "Usage: " << argv[0] << " number-of-threads n" << std::endl;
         return (-1);
     };  // end argc check
 

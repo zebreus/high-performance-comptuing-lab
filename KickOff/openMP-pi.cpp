@@ -30,21 +30,23 @@ double f(double a) {
 
 const double PI25DT =
     3.141592653589793238462643;  // No, we're not cheating -this is for testing!
-const long n =
-    500l * 1024 * 1024;  // default # of rectangles (42l = long int 42)
-const double h = 1.0 / (double)n;
 
 const double maxNumThreads = 1024;  // this is only for sanity checking
 
 // ******************* main
 int main(int argc, char* argv[]) {
     int numThreads = 0;
+    long n;  // default # of rectangles (42l = long int 42)
+    double h;
 
-    if (2 == argc)
+    if (3 == argc) {
         numThreads = string2int(argv[1]);
-    else  // if number of args illegal
+        n = string2int(argv[2]) * 1024l * 1024l;
+        h = 1.0 / (double)n;
+    } else  // if number of args illegal
     {
-        std::cerr << "Usage: " << argv[0] << " number-of-threads" << std::endl;
+        std::cerr << "Usage: " << argv[0] << " number-of-threads n"
+                  << std::endl;
         return (-1);
     };  // end argc check
 
@@ -56,12 +58,15 @@ int main(int argc, char* argv[]) {
 
     double sum = 0;
 
-//  *** Here is the OpenMP Magic!! (All in one line) ***
+    // tag::openmp[]
+    //  *** Here is the OpenMP Magic!! (All in one line) ***
 #pragma omp parallel for num_threads(numThreads) reduction(+ : sum)
+
     for (long i = 1; i <= n; i += 1) {
         double x = h * ((double)i - 0.5);
         sum += f(x);
     }
+    // end::openmp[]
     /* It would have been better to start from large i and count down, by the way. */
 
     double pi = h * sum;

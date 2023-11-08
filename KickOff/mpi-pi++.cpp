@@ -24,6 +24,14 @@ double f(double a) {
 const double PI25DT =
     3.141592653589793238462643;  // No, we're not cheating -this is for testing!
 
+// ******************* Utilities
+int string2int(const std::string& text) {
+    std::stringstream temp(text);
+    int result = 0xffffffff;
+    temp >> result;
+    return result;
+}
+
 // ******************* main
 int main(int argc, char* argv[]) {
     /** Standard MPI opening boilerplate **/
@@ -45,7 +53,7 @@ int main(int argc, char* argv[]) {
     long n;  // n is the number of rectangles
     if (0 == myid) {
         startwtime = MPI_Wtime();
-        n = 500l * 1024 * 1024;  // default # of rectangles (42l = long int 42)
+        n = strtol(argv[1], nullptr, 10) * 1024l * 1024l;
     };
 
     MPI_Bcast(

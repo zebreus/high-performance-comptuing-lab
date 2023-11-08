@@ -7,10 +7,13 @@
 #include <math.h>
 #include <mpi.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 double f(double a) {
     return (4.0 / (1.0 + a * a));
 }
+
+
 
 int main(int argc, char* argv[]) {
     // Strictly speaking, we could have made n a constant, like it is in our other programs,
@@ -42,7 +45,8 @@ int main(int argc, char* argv[]) {
 
     if (0 == myid) {
         startwtime = MPI_Wtime();
-        n = 500l * 1024 * 1024; /* default # of rectangles (42l = long int 42) */
+        
+        n = strtol(argv[1], 0, 10) * 1024l * 1024l;
     };
 
     MPI_Bcast(&n, 1, MPI_LONG_INT, 0, MPI_COMM_WORLD);

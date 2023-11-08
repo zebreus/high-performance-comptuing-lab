@@ -5,16 +5,19 @@
 
 # --------------------------------------------------------------------------
 
-# Choose a C++ and a C Compiler!
+# Choose a CXX and a C Compiler!
 # Ether gnu compiler chain (gcc):
-# C++ = g++
+# CXX = g++
 # CC = gcc
 # Or clang / LLVM:
-C++ = clang++
+CXX = clang++
 CC = clang
 # Or whatever is the default on your system:
-# C++ = c++
+# CXX = c++
 # CC = cc
+
+export OMPI_CC=$(CC)
+export OMPI_CXX=$(CXX)
 
 # Depending on your OS and local installation of clang, openmp, MPI, etc.,
 # you MIGHT need to uncomment one or more of the following lines:
@@ -50,6 +53,10 @@ clean:
 # $(*F) = The stem of the filename of the target (i.e. without .o, .cpp...)
 # $^ = The names of all the prerequisites, with spaces between them.
 
+show:
+	mpicc --showme:command
+	mpic++ --showme:command
+
 mpi-pi.o: mpi-pi.c
 	mpicc -O3 -c $<
 
@@ -63,35 +70,40 @@ mpi-pi++: mpi-pi++.o
 	mpic++ $(LDFLAGS) -o $@ $^
 	
 cpp11-pi.o: cpp11-pi.cpp
-	$(C++) $(CPPFLAGS) -pthread -c $<
+	$(CXX) $(CPPFLAGS) -pthread -c $<
 
 cpp11-pi: cpp11-pi.o
-	$(C++) $(LDFLAGS) -pthread -o $@ $^
+	$(CXX) $(LDFLAGS) -pthread -o $@ $^
 
 openMP-pi.o: openMP-pi.cpp
-	$(C++) $(CPPFLAGS) -fopenmp -c $<
+	$(CXX) $(CPPFLAGS) -fopenmp -c $<
 
 openMP-pi: openMP-pi.o
-	$(C++) $(LDFLAGS) -fopenmp -o $@ $^
+	$(CXX) $(LDFLAGS) -fopenmp -o $@ $^
 
 NUM_THREADS = $(shell grep -E 'core id' /proc/cpuinfo | sort | uniq | wc -l)
 # Get the number of physical cores to not need to edit after every commit/push/pull
 
+result.csv: runner.sh $(TARGETS)
+	bash runner.sh
+
+benchmark: result.csv
+
 tests: all
 ifeq (, $(shell which srun)) # When srun is not available, assume we want to run locally
 	echo "\nRunning cpp11-pi without slurm...";
-	./cpp11-pi $(NUM_THREADS)
+	./cpp11-pi $(NUM_THREADS) 500
 	echo "\nRunning openMP-pi without slurm...";
-	./openMP-pi $(NUM_THREADS)
+	./openMP-pi $(NUM_THREADS) 500
 	echo "\nRunning mpi-pi++ without slurm...";
-	mpiexec --mca btl tcp,self -n $(NUM_THREADS) ./mpi-pi++
+	mpiexec --mca btl tcp,self -n $(NUM_THREADS) ./mpi-pi++ 500
 	echo "\nRunning mpi-pi without slurm...";
-	mpiexec --mca btl tcp,self -n $(NUM_THREADS) ./mpi-pi
+	mpiexec --mca btl tcp,self -n $(NUM_THREADS) ./mpi-pi 500
 else # if srun is available, use it -- e.g. at the GSI!
-	srun -p debug -c $(NUM_THREADS) -- ./cpp11-pi $(NUM_THREADS)
-	srun -p debug -c $(NUM_THREADS) -- ./openMP-pi $(NUM_THREADS)
-	salloc -p debug --nodes=$(NUM_THREADS) --ntasks-per-node=1 -c 1 -- srun -- ./mpi-pi
-	salloc -p debug --nodes=$(NUM_THREADS) --ntasks-per-node=1 -c 1 -- srun -- ./mpi-pi++
+	srun -p debug -c $(NUM_THREADS) -- ./cpp11-pi $(NUM_THREADS) 500
+	srun -p debug -c $(NUM_THREADS) -- ./openMP-pi $(NUM_THREADS) 500
+	salloc -p debug --nodes=$(NUM_THREADS) --ntasks-per-node=1 -c 1 -- srun -- ./mpi-pi 500
+	salloc -p debug --nodes=$(NUM_THREADS) --ntasks-per-node=1 -c 1 -- srun -- ./mpi-pi++ 500
 endif
 
 # Note: The test whether srun is available (above) was provided by Jakob Schrettenbrunner.

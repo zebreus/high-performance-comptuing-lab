@@ -1,27 +1,35 @@
 #!/usr/bin/env bash
+filename="results.csv"
 
-counter=1
-NUM_THREADS=2
-N=500
-filename="${NUM_THREADS}_${N}_results.csv"
-echo ",cpp11-pi, openMP-pi, mpi-pi++, mpi-pi" > $filename
+RUNS=10
 
-while [ $counter -le 10 ]
-do
-	echo -ne $counter , >> $filename 
-    echo "\nRunning cpp11-pi without slurm...";
-	./cpp11-pi $NUM_THREADS 2>> $filename
-	echo -ne "," >> $filename
-	echo "\nRunning openMP-pi without slurm...";
-	./openMP-pi $NUM_THREADS 2>> $filename
-	echo -ne "," >> $filename
-	echo "\nRunning mpi-pi++ without slurm...";
-	mpiexec --mca btl tcp,self -n $NUM_THREADS ./mpi-pi++ 2>> $filename
-	echo -ne "," >> $filename
-	echo "\nRunning mpi-pi without slurm...";
-	mpiexec --mca btl tcp,self -n $NUM_THREADS ./mpi-pi 2>> $filename
-	echo "" >> $filename
-    ((counter++))
+echo "name,threads,n,run,duration" >$filename
+
+for N in 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192; do
+	for NUM_THREADS in 1 2 4 8; do
+		counter=1
+		while [ $counter -le $RUNS ]; do
+			echo "Running cpp11-pi without slurm..."
+			echo -ne cpp11-pi,$NUM_THREADS,$N,$counter, >>$filename
+			./cpp11-pi $NUM_THREADS $N 2>>$filename
+			echo "" >>$filename
+
+			echo "Running openMP-pi without slurm..."
+			echo -ne openMP-pi,$NUM_THREADS,$N,$counter, >>$filename
+			./openMP-pi $NUM_THREADS $N 2>>$filename
+			echo "" >>$filename
+
+			echo "Running mpi-pi without slurm..."
+			echo -ne mpi-pi,$NUM_THREADS,$N,$counter, >>$filename
+			mpiexec --mca btl tcp,self -n $NUM_THREADS ./mpi-pi $N 2>>$filename
+			echo "" >>$filename
+
+			echo "Running mpi-pi++ without slurm..."
+			echo -ne mpi-pi++,$NUM_THREADS,$N,$counter, >>$filename
+			mpiexec --mca btl tcp,self -n $NUM_THREADS ./mpi-pi++ $N 2>>$filename
+			echo "" >>$filename
+
+			((counter++))
+		done
+	done
 done
-
-echo ALL done

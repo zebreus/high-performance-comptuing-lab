@@ -23,10 +23,13 @@
 
             buildInputs = [
               llvmPackages_16.openmp
-              gcc
+              gcc12
+              clang_16
+
               openmpi
               gnumake
               zlib
+              sshfs
 
               clang-tools_16
               lldb

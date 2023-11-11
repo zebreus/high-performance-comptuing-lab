@@ -72,6 +72,47 @@ include::scripts/vega-chart.adoc[]
 :vega-lite-filename: processed-assets/implementation-comparison-fixed-threads.vl.json
 include::scripts/vega-chart.adoc[]
 
+=== Benchmarking the implementations on the virgo cluster
+
+.Notes
+- 128 threads is the highest number of cores for 1 node consistently on the main partition.
+- 1 Job tests all four implementations once for each n.
+- For each tested number of threads we ran 10 jobs.
+
+.Performance of the different implementations with 1 thread
+:chart-id: id=performance-low-threads
+:vega-lite-filename: processed-assets/performance-low-threads.vl.json
+include::scripts/vega-chart.adoc[]
+
+.Performance of the different implementations with 8 threads
+:chart-id: id=performance-medium-threads
+:vega-lite-filename: processed-assets/performance-medium-threads.vl.json
+include::scripts/vega-chart.adoc[]
+
+.Performance of the different implementations with 128 threads
+:chart-id: id=performance-high-threads
+:vega-lite-filename: processed-assets/performance-high-threads.vl.json
+include::scripts/vega-chart.adoc[]
+
+We can see that both mpi implementations behave nearly identically. In the more detailed charts the mpi C implementation will be omitted.
+
+.Performance of mpi-cpp
+:chart-id: id=mpi-cpp-virgo
+:vega-lite-filename: processed-assets/mpi-cpp-virgo.vl.json
+include::scripts/vega-chart.adoc[]
+
+.Performance of openmp
+:chart-id: id=openmp-virgo
+:vega-lite-filename: processed-assets/openmp-virgo.vl.json
+include::scripts/vega-chart.adoc[]
+
+.Performance of native C++ threads
+:chart-id: id=cpp-threads-virgo
+:vega-lite-filename: processed-assets/cpp-threads-virgo.vl.json
+include::scripts/vega-chart.adoc[]
+
+
+
 == Appendix
 
 [#our-computers,cols="1,2,2"]
@@ -101,5 +142,29 @@ include::scripts/vega-chart.adoc[]
 |32
 |8
 |=== 
+
+.C++ threads implementation
+[source#cpp-threads-listing.linenums,cpp]
+----
+include::KickOff/cpp11-pi.cpp[]
+----
+
+.C++ openMP implementation
+[source#openMP-listing.linenums,cpp]
+----
+include::KickOff/openMP-pi.cpp[]
+----
+
+.C++ MPI implementation
+[source#mpi-cpp-listing.linenums,cpp]
+----
+include::KickOff/mpi-pi++.cpp[]
+----
+
+.C MPI implementation
+[source#mpi-c-listing.linenums,c]
+----
+include::KickOff/mpi-pi.c[]
+----
 
 include::scripts/trailing-scripts.adoc[]

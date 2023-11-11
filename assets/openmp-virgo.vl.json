@@ -1,0 +1,51 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Performance of the openMP implementation",
+  "config": {
+    "font": "Spectral, sans-serif",
+    "axis": { "grid": true, "tickBand": "extent" }
+  },
+  "autosize": "fit",
+  "width": 500,
+  "height": 300,
+  "data": {
+    "url": "./openmp-virgo.csv"
+  },
+  "transform": [
+    {
+      "aggregate": [ { "field": "duration", "op": "mean", "as": "durationb" } ],
+      "groupby": [ "threads", "n" ]
+    }
+  ],
+  "encoding": {
+    "y": { "field": "n", "type": "nominal", "sort": null, "title": "Problem size" },
+    "x": { "field": "threads", "type": "nominal", "sort": null, "title": "Number of threads" }
+
+  },
+  "layer": [
+    {
+      "mark": "rect",
+      "encoding": {
+        "color": {
+          "scale": { "type": "log", "base": 10, "nice": true, "range": [ "#ffffff", "#ac1b21", "#000000" ] },
+          "field": "durationb",
+          "type": "quantitative",
+          "title": "Mean duration (seconds)",
+          "legend": { "direction": "vertical", "gradientLength": 220 }
+
+
+        }
+      }
+    },
+    {
+      "mark": "text",
+      "encoding": {
+        "text": { "field": "durationb", "type": "quantitative", "format": ".3f" },
+        "color": {
+          "condition": { "test": "datum['durationb'] < 0.059", "value": "black" },
+          "value": "white"
+        }
+      }
+    }
+  ]
+}

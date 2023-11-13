@@ -1,0 +1,65 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Efficiency of the MPI C++ implementation",
+  "config": {
+    "font": "Spectral, sans-serif",
+    "axis": { "grid": true, "tickBand": "extent" }
+  },
+  "autosize": "fit",
+  "width": 500,
+  "height": 300,
+  "data": {
+    "url": "./mpi-cpp-virgo.csv"
+  },
+  "transform": [
+    {
+      "aggregate": [ { "field": "duration", "op": "mean", "as": "meanDuration" } ],
+      "groupby": [ "threads", "n" ]
+    },
+    {
+      "sort": [ { "field": "threads", "order": "ascending" } ],
+      "window": [ { "op": "first_value", "as": "firstDuration", "field": "meanDuration" } ],
+      "groupby": [ "n" ]
+    },
+    {
+      "calculate": "datum['firstDuration'] / datum['meanDuration']",
+      "as": "speedup"
+    },
+    {
+      "calculate": "datum['firstDuration'] / datum['meanDuration'] / datum['threads']",
+      "as": "efficiency"
+    }
+
+  ],
+  "encoding": {
+    "y": { "field": "n", "type": "nominal", "sort": null, "title": "Problem size" },
+    "x": { "field": "threads", "type": "nominal", "sort": null, "title": "Number of threads" }
+
+  },
+  "layer": [
+    {
+      "mark": "rect",
+      "encoding": {
+        "color": {
+          "scale": { "range": [ "#000000", "#ac1b21", "#ffffff" ] },
+          "field": "efficiency",
+          "type": "quantitative",
+          "title": "Speedup",
+          "legend": { "direction": "vertical", "gradientLength": 220 }
+
+
+        }
+      }
+    },
+    {
+      "mark": "text",
+      "encoding": {
+        "text": { "field": "efficiency", "type": "quantitative", "format": ".0%" },
+        "color": {
+          "condition": { "test": "datum['efficiency'] > 0.6", "value": "black" },
+          "value": "white"
+        }
+      }
+    }
+  ]
+}

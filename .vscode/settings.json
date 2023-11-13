@@ -58,5 +58,10 @@
     "streambuf": "cpp",
     "thread": "cpp",
     "typeinfo": "cpp"
+  },
+  "asciidoc.extensions.enableKroki": true,
+  "asciidoc.preview.asciidoctorAttributes": {
+    "allow-uri-read": true,
+    "kroki-server-url": "https://kroki.io"
   }
 }

@@ -144,6 +144,9 @@ include::scripts/vega-chart.adoc[]
 :vega-lite-filename: processed-assets/mpi-cpp-efficiency.vl.json
 include::scripts/vega-chart.adoc[]
 
+The reason that there is no Speedup nor an increase Efficiency is most likely due to Hyperthreading. So both 1 and 2 threads executions are processed on one single (physical) core with two threads. This could be confirmed with a number of threads not a power of two (eg 3 or 5).
+Additionally the increase in general is not doubled per double amount of threads because of a slight increased overhead to setup and distribute the work across all threads.
+
 == Appendix
 
 [#our-computers,cols="1,2,2"]

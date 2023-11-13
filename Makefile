@@ -72,7 +72,7 @@ $(PROCESSED_CHARTS) : processed-assets/%.vl.json : assets/%.vl.json $(VEGA_DATA_
 # 	bash data/make_data.sh $< data
 
 clean:
-	rm -rf 
+	rm -rf report1.pdf $(VEGA_DATA_FILES) processed-assets
 
 dist-clean: clean
 	rm -rf $(TARGETS)

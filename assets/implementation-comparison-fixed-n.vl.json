@@ -13,21 +13,20 @@
   "encoding": {
     "x": {
       "field": "threads",
-      "type": "quantitative",
+      "type": "ordinal",
       "sort": "ascending",
-      "scale": {
-        "domain": [
-          0,
-          8
-        ]
-      },
       "title": "Number of threads"
     },
     "y": {
       "field": "duration",
       "aggregate": "mean",
       "type": "quantitative",
-      "title": "Mean duration (seconds)"
+      "title": "Mean duration (seconds)",
+      "scale": {
+        "type": "log",
+        "base": 2,
+        "nice": true
+      }
     },
     "color": {
       "field": "name",

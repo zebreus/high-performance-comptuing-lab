@@ -12,9 +12,9 @@ CXX = clang++
 # CXX = g++
 
 CFLAGS	= -O3 --std=c++17 -Wall
-PROGS	= matrix_sequential matrix_generator
+PROGS	= matrix_sequential matrix_generator matrix_rayon matrix_openmp
 OBJS	= matrix_sequential.o matrix_generator.o CMatrix.o
-TESTFILES = matrix-A-2000x2000.txt matrix-B-2000x2000.txt
+TESTFILES = matrix-A-8000x8000.txt matrix-B-8000x8000.txt
 
 CFLAGS	+= -I/usr/local/include/
 LDFLAGS += -L/usr/local/lib/
@@ -52,7 +52,7 @@ CMatrix.o: CMatrix.cpp CMatrix.h
 	$(CXX) $(CFLAGS) -fopenmp -c -o $@ $<
 
 $(TESTFILES): matrix_generator
-	./matrix_generator 2000 2000 >$@
+	./matrix_generator 8000 8000 >$@
 
 clean:
 	-rm -rf $(PROGS) *~ *.o ._*
@@ -60,14 +60,8 @@ clean:
 distclean: clean
 	-rm -rf $(TESTFILES)
 
-test:  $(PROGS) $(TESTFILES)
-	echo "Calling matrix_sequential..."
-ifeq (, $(shell which srun)) # When srun is not available, assume we want to run locally
-	./matrix_sequential $(TESTFILES) > /dev/null
-else # if srun is available, use it -- e.g. at the GSI!
-#      run with one process (-n 1) and one thread (-c 1) (on the debug partition)
-	srun -p debug -n 1 -c 1 -- ./matrix_sequential $(TESTFILES)
-endif
+results_local.csv: $(PROGS)
+	bash ./localBenchmark.sh $@
 
 run-%: matrix_%
 	./$<
@@ -75,7 +69,7 @@ run-%: matrix_%
 test-%: matrix_% $(PROGS) $(TESTFILES)
 	echo "Calling $<..."
 ifeq (, $(shell which srun)) # When srun is not available, assume we want to run locally
-	./$< $(TESTFILES) > /dev/null
+	./$< $(TESTFILES) --threads 16 > /dev/null
 else # if srun is available, use it -- e.g. at the GSI!
 #      run with one process (-n 1) and one thread (-c 1) (on the debug partition)
 	srun -p debug -n 1 -c 1 -- ./$< $(TESTFILES)

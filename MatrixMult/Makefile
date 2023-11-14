@@ -60,8 +60,13 @@ clean:
 distclean: clean
 	-rm -rf $(TESTFILES)
 
+.PRECIOUS: results_local.csv results_virgo.csv
+
 results_local.csv: $(PROGS)
 	bash ./localBenchmark.sh $@
+
+results_virgo.csv: $(PROGS)
+	bash ./virgoBenchmark.sh $@
 
 run-%: matrix_%
 	./$<

@@ -32,6 +32,23 @@ inline double secondsSince(
     return result;
 }
 
+// tag::algorithm[]
+CMatrix multiply(CMatrix const& m1, CMatrix const& m2) {
+    CMatrix result(m2.width, m1.height);  // allocate memory
+    for (unsigned int row = 0; row < m1.height; row++) {
+        for (unsigned int col = 0; col < m2.width; col++) {
+            double sum = 0.0;
+            for (unsigned int dot = 0; dot < m2.height; dot++) {
+                sum += m1[row][dot] * m2[dot][col];
+            }
+            result[row][col] = sum;
+        }
+    }
+    return result;
+}
+
+// end::algorithm[]
+
 // +++ main starts here +++
 int main(int argc, char** argv) {
     // process arguments
@@ -54,21 +71,7 @@ int main(int argc, char** argv) {
               << "setup time = " << secondsSince(startTime, milestoneSetup)
               << " seconds." << std::endl;
 
-    // --- multiply matrices ---
-    CMatrix result(m2.width, m1.height);  // allocate memory
-
-    for (unsigned int row = 0; row < m1.height; row++) {
-        for (unsigned int col = 0; col < m2.width; col++) {
-            double sum = 0.0;
-            for (unsigned int dot = 0; dot < m2.height; dot++) {
-                // cout <<  "m1[" << row << "][" << dot << "] = " << m1[row][dot]
-                //  << ", m2[" << dot << "][" << col << "] = " << m2[dot][col] << endl;
-                sum += m1[row][dot] * m2[dot][col];
-            }
-            // cout << "result[" << row <<" ][" << col << "] = " << sum;
-            result[row][col] = sum;
-        }
-    }
+    auto result = multiply(m1, m2);
 
     auto milestoneCalculate = std::chrono::system_clock::now();
     std::cerr << std::setprecision(8) << "calculation time = "

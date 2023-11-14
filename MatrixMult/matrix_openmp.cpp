@@ -33,6 +33,24 @@ inline double secondsSince(
     return result;
 }
 
+// tag::algorithm[]
+CMatrix multiply(CMatrix const& m1, CMatrix const& m2) {
+    CMatrix result(m2.width, m1.height);  // allocate memory
+#pragma omp parallel for shared(m1, m2, result) collapse(2) schedule(static)
+    for (unsigned int row = 0; row < m1.height; row++) {
+        for (unsigned int col = 0; col < m2.width; col++) {
+            double sum = 0.0;
+            for (unsigned int dot = 0; dot < m2.height; dot++) {
+                sum += m1[row][dot] * m2[dot][col];
+            }
+            result[row][col] = sum;
+        }
+    }
+    return result;
+}
+
+// end::algorithm[]
+
 // +++ main starts here +++
 int main(int argc, char** argv) {
     // constexpr int is_parallel = 1;
@@ -68,25 +86,7 @@ int main(int argc, char** argv) {
               << "setup time = " << secondsSince(startTime, milestoneSetup)
               << " seconds." << std::endl;
 
-    // --- multiply matrices ---
-    CMatrix result(m2.width, m1.height);  // allocate memory
-
-    double sum = 0.0;
-#pragma omp parallel for shared(m1, m2, result) private(sum) collapse(2)
-    for (unsigned int row = 0; row < m1.height; row++) {
-        for (unsigned int col = 0; col < m2.width; col++) {
-            for (unsigned int dot = 0; dot < m2.height; dot++) {
-                // cout <<  "m1[" << row << "][" << dot << "] = " << m1[row][dot]
-                //  << ", m2[" << dot << "][" << col << "] = " << m2[dot][col] << endl;
-                sum += m1[row][dot] * m2[dot][col];
-            }
-            // std::cout << "result[" << row << " ][" << col << "] = " << sum
-            //           << '/n' << std::endl;
-
-            result[row][col] = sum;
-            sum = 0.0;
-        }
-    }
+    auto result = multiply(m1, m2);
 
     auto milestoneCalculate = std::chrono::system_clock::now();
     std::cerr << std::setprecision(8) << "calculation time = "

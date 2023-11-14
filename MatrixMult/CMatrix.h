@@ -34,6 +34,11 @@ class CMatrix {
     // print matrix to stdout
     void print() const;
 
+    double const* operator[](unsigned int rowNumber) const {
+        assert(rowNumber < height);
+        return container + (rowNumber * width);
+    }
+
     // Row selector -
     // With this, you can use matrix[row][col]
     // Note that we only need to overload the first square brackets,

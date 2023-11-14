@@ -44,7 +44,7 @@
           "scale": { "range": [ "#000000", "#ac1b21", "#ffffff" ] },
           "field": "efficiency",
           "type": "quantitative",
-          "title": "Speedup",
+          "title": "Efficiency",
           "legend": { "direction": "vertical", "gradientLength": 220 }
 
 

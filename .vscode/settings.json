@@ -63,5 +63,12 @@
   "asciidoc.preview.asciidoctorAttributes": {
     "allow-uri-read": true,
     "kroki-server-url": "https://kroki.io"
-  }
+  },
+  "grammarly.selectors": [
+    {
+      "language": "asciidoc",
+      "scheme": "file",
+      "pattern": "report1.adoc"
+    }
+  ]
 }

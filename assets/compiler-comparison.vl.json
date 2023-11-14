@@ -1,6 +1,6 @@
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-  "title": "Different compilers (threads=8, mean of implementations)",
+  "title": "Different compilers (threads=8, all implementations)",
   "config": {
     "font": "Spectral, sans-serif"
   },

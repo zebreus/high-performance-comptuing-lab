@@ -34,78 +34,74 @@ by +
 
 == Intro 
 
-In this lab report we will compare and evaluate four implementations of an algorithm for calculating the number pi. All four implementations use different libraries to make the algorithm run in parallel. We will focus on comparing the performance in relation to the number of threads and the precision of pi. The precision of pi is determined by the number of iterations the algorithm runs. We will call the number of iterations n or the problem size.
+In this lab report, we will compare and evaluate four implementations of an algorithm for calculating the number pi. All four implementations use different libraries to make the algorithm run in parallel. We will focus on comparing the performance concerning the number of threads and the precision of pi. The algorithm's number of iterations determines the precision of pi. We will call the number of iterations steam:[n] or the problem size.
 
-First we will run some small-scale local tests to understand the problem and then we will run some large-scale tests on the virgo cluster to get some performance data for bigger thread counts and problem sizes.
-
-.Example of openMP in CPP
-[source#openmp-example,cpp]
-----
-include::KickOff/openMP-pi.cpp[tag=openmp]
-----
+First, we will run some small-scale local tests to understand the problem, and then we will run some large-scale tests on the Virgo cluster to get some performance data for bigger thread counts and problem sizes.
 
 == Benchmarking the implementations on a laptop
 
-We tested for different parallel implementations with 1 2 4 and 8 threads on Lennarts computer (shown in <<our-computers>>). Each implementation was tested 10 times for each number of threads and problem size.
+We tested for different parallel implementations with 1, 2, 4, and 8 threads on Lennart's computer (shown in <<our-computers>>). Each implementation was tested ten times for each number of threads and problem size.
 
 // TODO: Rewrite
-// <<weird-chart>> shows our first measurements. You can see two different performance characteristics, one for the MPI implementations and one for the other implementations. On further investigation we discovered, that the MPI implementations actually used gcc, while the other implementations used clang. This is because the MPI compiler uses gcc by default if the `OMPI_CC`.
+// <<weird-chart>> shows our first measurements. You can see two different performance characteristics, one for the MPI implementations and one for the other implementations. We discovered on further investigation that the MPI implementations used gcc, while the other implementations used clang. This is because the MPI compiler uses gcc by default if the `OMPI_CC`.
 
-We noticed that there is a significant performance difference between the executables created with GCC and clang. <<compiler-chart>> compares the performance of the different compilers. It should be noted that we did not further investigate the performance difference between the two compilers, it could be that the version of GCC shipped with nix is for some reason producing slower code than the version of clang shipped with nix.
+We noticed a significant performance difference between the executables created with GCC and clang. <<compiler-comparison>> compares the performance of the different compilers. It should be noted that we did not further investigate the performance difference between the two compilers; it could be that the version of GCC shipped with Nix is, for some reason, producing slower code than the version of clang shipped with Nix.
 
-.GCC 12 vs Clang 16
+.GCC 12 vs. Clang 16
 :chart-id: id=compiler-comparison
 :vega-lite-filename: processed-assets/compiler-comparison.vl.json
 include::scripts/vega-chart.adoc[]
 
-We decided to only use clang for our further measurements. The optimization level was set to `-O3` for all measurements. We measured the performance for 1, 2, 4 and 8 threads. If not specified otherwise the value for n is set to 8192.
+We decided only to use clang for our further measurements. The optimization level was set to `-O3` for all measurements. We measured the performance for 1, 2, 4, and 8 threads. If not specified otherwise, the value for steam:[n] is set to 8192.
 
 === Measurements
 
-<<implementation-comparison-fixed-n>> show the mean duration for all implementations for a problem with size 2048. We can see that there is no significant difference between the implementations. However if we comapare different problem sizes for a fixed number of threads a differnent view emerges. <<implementation-comparison-fixed-threads>> shows that the MPI implementations seem to incur a fixed overhead of 0.03 seconds (at least for 8 threads). For bigger problem sizes, that overhead becomes negligible, as the execution time becomes a bigger factor. Below problem sizes of 2048 the overhead becomes relevant.
+<<implementation-comparison-fixed-n>> shows the mean duration for all implementations for a problem with size 2048. We can see that there is no significant difference between the implementations. However, a different view emerges if we compare different problem sizes for a fixed number of threads. <<implementation-comparison-fixed-threads>> shows that the MPI implementations seem to incur a fixed overhead of 0.03 seconds (at least for eight threads). For bigger problem sizes, that overhead becomes negligible as the execution time becomes a more significant factor. For problem sizes less than 2048, the overhead becomes relevant.
 
 .Mean performance for a problem size of n=2048
 :chart-id: id=implementation-comparison-fixed-n
 :vega-lite-filename: processed-assets/implementation-comparison-fixed-n.vl.json
 include::scripts/vega-chart.adoc[]
 
-.Mean performance with 8 threads
+.Mean performance with eight threads
 :chart-id: id=implementation-comparison-fixed-threads
 :vega-lite-filename: processed-assets/implementation-comparison-fixed-threads.vl.json
 include::scripts/vega-chart.adoc[]
 
-This slowdown for the MPI based implementations seems to be related to the number of threads used. <<mpi-cpp>> shows that the slowdown is not present when using only a single thread, but increases with the number of threads used.
+This slowdown for the MPI-based implementations seems to be related to the number of threads used. <<mpi-cpp>> shows that the slowdown is not present when using only a single thread but increases with the number of threads used.
 
 .Mean performance for a problem size of n=2048
 :chart-id: id=mpi-cpp
 :vega-lite-filename: processed-assets/mpi-cpp.vl.json
 include::scripts/vega-chart.adoc[]
 
-== Benchmarking the implementations on the virgo cluster
+== Benchmarking the implementations on the Virgo cluster
 
 [NOTE]
 ====
 .Test setup
-- 128 threads is the highest number of cores for 1 node consistently on the main partition.
+- 128 threads is consistently the highest number of cores for one node on the main partition.
 - 1 Job tests all four implementations once for each n.
-- For each tested number of threads we ran 10 jobs.
-- Compiled with GCC, as we did not manage to install clang on the virgo cluster.
+- For each tested number of threads, we ran ten jobs.
+- Compiled with GCC, as we did not manage to install clang on the Virgo cluster.
+- We made sure that enough hardware threads were available for every thread.
+- We tried to ensure that only one thread runs on each real CPU core but probably failed.
 ====
 
 === Measurements
 
-<<performance-low-threads>> compares the execution duration of the different implementations when running with only a single thread. All four implementations perform nearly identical. This is to be expected as there should be virtually no overhead for the different parrallelization methods when only using a single thread.
+<<performance-low-threads>> compares the execution duration of the different implementations when running with only a single thread. All four implementations perform nearly identically. This is expected as there should be virtually no overhead for the different parallelization methods when only using a single thread.
 
-.Performance of the different implementations with 1 thread
+.Performance of the different implementations with one thread
 :chart-id: id=performance-low-threads
 :vega-lite-filename: processed-assets/performance-low-threads.vl.json
 include::scripts/vega-chart.adoc[]
 
-NOTE: I really like how this shows the linear relationship between the problem size and the execution time if we are not doing any parallelization. This also demonstrates that our test setup is not measuring any weird delays from somewhere else.
+NOTE: I like how this shows the linear relationship between the problem size and the execution time if we are not doing any parallelization. This also demonstrates that our test setup is not measuring any weird delays from somewhere else.
 
-<<performance-medium-threads>> and <<performance-high-threads>> show that when using a bigger number of threads all implementations The overhead per thread seems to be the lowest when using MPI, higher for native C++ threads and the highest for the openMP implementation. If the problem is big enough, the overhead of the different implementations is negligible.
+<<performance-medium-threads>> and <<performance-high-threads>> show that when using a more considerable number of threads, all implementations still behave similarly for big problem sizes. For smaller problem sizes, the performance of the implementations diverges. The overhead per thread seems to be the lowest when using MPI, higher for native C++ threads, and higher for openMP implementation. If the problem is big enough, the overhead of the different implementations is negligible.
 
-.Performance of the different implementations with 8 threads
+.Performance of the different implementations with eight threads
 :chart-id: id=performance-medium-threads
 :vega-lite-filename: processed-assets/performance-medium-threads.vl.json
 include::scripts/vega-chart.adoc[]
@@ -115,14 +111,14 @@ include::scripts/vega-chart.adoc[]
 :vega-lite-filename: processed-assets/performance-high-threads.vl.json
 include::scripts/vega-chart.adoc[]
 
-We can see that both mpi implementations behave nearly identically. In the more detailed charts the mpi C implementation will be omitted.
+We can see that both mpi implementations behave nearly identically. In the more detailed charts, the MPI C implementation will be omitted.
 
 .Performance of mpi-cpp
 :chart-id: id=mpi-cpp-virgo
 :vega-lite-filename: processed-assets/mpi-cpp-virgo.vl.json
 include::scripts/vega-chart.adoc[]
 
-.Performance of openmp
+.Performance of OpenMP
 :chart-id: id=openmp-virgo
 :vega-lite-filename: processed-assets/openmp-virgo.vl.json
 include::scripts/vega-chart.adoc[]
@@ -134,25 +130,60 @@ include::scripts/vega-chart.adoc[]
 
 === Advanced evaluation
 
+<<mpi-cpp-speedup>> shows the relative speedup when running the MPI C++ implementation with multiple threads. The speedup is always relative to the execution time of the same problem size with a single thread.
+
+It seems like there is no speedup when using two threads instead of one. We suspect that this is due to SMT. When we request two cores from Slurm, we probably only get one real core, and the second one is just another thread on the same core. This could explain why the speedup for two cores is close to one. Another theory is that the overhead of MPI starting a second thread cancels out precisely the speedup from using two threads.
+
+The figure shows that for bigger problem sizes, the speedup nearly doubles when doubling the number of threads after the second thread. It is not a perfect doubling because the overhead of starting the threads increases with the number of threads. With bigger problem sizes, the overhead becomes less significant, and the speedup approaches a doubling.
+
+It is interesting to see that for very small problem sizes, the overhead for starting many threads is so significant that the speedup becomes less than one.
+
 .Speedup of mpi-cpp
 :chart-id: id=mpi-cpp-speedup
 :vega-lite-filename: processed-assets/mpi-cpp-speedup.vl.json
 include::scripts/vega-chart.adoc[]
+
+The efficiency is defined as the speedup divided by the cost. In our example, the cost is defined as the number of threads used. <<mpi-cpp-efficiency>> shows that the efficiency decreases the more threads are used. However, the rate of decrease is getting smaller for bigger problem sizes. This is because the overhead of starting the threads becomes less significant for bigger problem sizes.
+
+<<mpi-cpp-efficiency>> also shows again that we seem to have a problem with our measurements, as the efficiency drops to 50% after the first doubling.
+
+It is interesting to see that the efficiency for eight threads is consistently slightly better than expected. We have not found any explanation for this.
 
 .Efficiency of mpi-cpp
 :chart-id: id=mpi-cpp-efficiency
 :vega-lite-filename: processed-assets/mpi-cpp-efficiency.vl.json
 include::scripts/vega-chart.adoc[]
 
-The reason that there is no Speedup nor an increase Efficiency is most likely due to Hyperthreading. So both 1 and 2 threads executions are processed on one single (physical) core with two threads. This could be confirmed with a number of threads not a power of two (eg 3 or 5).
-Additionally the increase in general is not doubled per double amount of threads because of a slight increased overhead to setup and distribute the work across all threads.
+== Conclusion
+
+While our measurements and results may not be perfect, we have gained hands-on experience with the Virgo cluster and learned to use OpenMP and MPI.
+
+=== Future work
+
+We could investigate why we did not experience any speedup when using two threads vs one thread on the Virgo cluster. If the SMT theory is correct, it is possible that we could get a speedup by requesting two cores instead of two threads.
+
+Making measurements for problem sizes bigger than stem:[n=16384] would also be interesting.
+
+In our measurements, we only benchmarked MPI on a single host. While this brought some level of comparability to openMP and native C++ threads, this is not the way MPI is supposed to be used. It would be interesting to see how MPI compares when using multiple hosts.
+
+Our time management skills also have room for improvement, as we did not manage to hand in this report in time. In future work, we should probably try to start earlier.
+
+We also were not able to use clang on the Virgo cluster. It would be interesting to see if the performance difference between clang and gcc we measured on our machine is also present on the Virgo cluster.
+
+[glossary]
+== List of abbreviations
+// Abbreviations from here will automatically be linked to the document
+
+// Abbreviations in random order and links to read more about them
+[glossary]
+[[SMT]]SMT:: Simultaneous multithreading link:pass:[https://en.wikipedia.org/wiki/Simultaneous_multithreading][🔗^]
 
 == Appendix
 
 [#our-computers,cols="1,2,2"]
 .Our computers
 |===
-|sdfs
+|
 |Lennart
 |Björn 
 
@@ -169,7 +200,7 @@ Additionally the increase in general is not doubled per double amount of threads
 |Intel HD Graphics 620
 
 |OS
-|Nix OS unstable/latest - 64 Bit
+|NixOS unstable/latest - 64 Bit
 |Ubuntu 23.04 - 64 Bit
 
 |RAM (GB)

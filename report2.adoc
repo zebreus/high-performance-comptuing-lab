@@ -1,0 +1,90 @@
+:doctype: book
+:imagesdir: images
+:stylesheet: paper.css
+:last-update-label!:
+:source-highlighter: highlight.js
+:highlightjs-theme: thesis
+:highlightjsdir: libraries/highlightjs
+:stem:
+:toc: macro
+:xrefstyle: short
+ifndef::env-vscode[]
+:kroki-fetch-diagram: true
+:kroki-default-options: inline
+endif::env-vscode[]
+
+image::../assets/logo_hda.svg[role=logo]
+
+[.university.text-center]
+Darmstadt University of Applied Sciences
+
+[.faculty.text-center]
+Faculty of Computer Science
+
+[discrete#main-title]
+= Lab report for the second high-performance computing exercise
+
+[.presented-by.text-center]
+by +
+****REMOVED**** ***REMOVED*** +
+****REMOVED**** ***REMOVED***
+
+:part-signifier: Part
+:listing-caption: Listing
+
+== Intro 
+
+In the second lab we will write and benchmark a program that multiplies two matrices using multiple threads and shared memory. Analyze your program and predict the relationship between the run-time and the width and height of the matrices. At last we will measure the performance to verify our prediction.
+
+=== Implementation
+
+<<sequential_implementation>> shows the sequential implementation of the matrix multiplication. The algorithm is pretty straight forward. We iterate over the rows of the first matrix and the columns of the second matrix. For each element we calculate the dot product of the row and column. The result is stored in the `result` matrix.
+
+.Sequential implementation
+[source#sequential_implementation.linenums,cpp]
+----
+include::MatrixMult/matrix_sequential.cpp[tag=algorithm]
+----
+
+We then parallelized the version using openMP, which can be seen in <<parallel_implementation>>. We instruct OpenMP to collapse the two outer for loops into one and to schedule all iterations of it's body among the threads. This way every thread repeatedly does iterations of the innermost loop with different values for `row` and `col`. `m1` and `m2` are shared among all threads, as they will only be read. We also share `result` among all threads, as every iteration of the inner loop writes to a different position in it, so there should be no race conditions. The sum variable is private to every iteration, as it is defined inside of the loop.
+
+By setting the schedule to `static` we ensure that the workload is evenly distributed among the threads. In this case this should lead to the best performance, as the workload is the same for every iteration of the inner loop.
+
+.Parallel openMP implementation
+[source#parallel_implementation.linenums,cpp]
+----
+include::MatrixMult/matrix_openmp.cpp[tag=algorithm]
+----
+
+
+== Appendix
+
+[#our-computers,cols="1,2,2"]
+.Our computers
+|===
+|
+|Lennart
+|Björn 
+
+|CPU
+|i9-11950H @ 2.6GHz
+|i5-7200U @ 2.5GHz
+
+|CPU-Kerne / Threads
+|8 / 16
+|2 / 4
+
+|GPU
+|RTX3070 mobile
+|Intel HD Graphics 620
+
+|OS
+|NixOS unstable/latest - 64 Bit
+|Ubuntu 23.04 - 64 Bit
+
+|RAM (GB)
+|32
+|8
+|=== 
+
+include::scripts/trailing-scripts.adoc[]

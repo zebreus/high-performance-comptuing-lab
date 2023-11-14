@@ -52,19 +52,18 @@ output_filename=$WORK_DIR/results.csv
 
 RUNS=20
 
-echo "name,threads,matrix_size,duration" >$output_filename
+echo "name,threads,matrix_size,run,duration,sum" >$output_filename
 
 for NUM_THREADS in 2 4 8 16 32 64 128; do
     TEST_RUN=1
     while [ $TEST_RUN -le $RUNS ]; do
         JOBNAME="matrix-mult-$NUM_THREADS-$TEST_RUN"
 
-        sbatch --partition=main --job-name=$JOBNAME --cpus-per-task=$NUM_THREADS --ntasks=1 --nodes=1 --output %j.out -- ./compareRayonAndOpenmp.sh $((NUM_THREADS / 2)) $output_filename
+        sbatch --partition=main --job-name=$JOBNAME --cpus-per-task=$NUM_THREADS --ntasks=1 --nodes=1 --output %j.out -- ./compareRayonAndOpenmp.sh $((NUM_THREADS / 2)) $output_filename $TEST_RUN
         # bash ./compareRayonAndOpenmp.sh $NUM_THREADS $filename
 
         ((TEST_RUN++))
     done
 done
 
-cp $output_filename $filename
-rm -rf $WORK_DIR
+echo Working in $WORK_DIR

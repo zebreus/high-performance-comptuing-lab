@@ -8,8 +8,8 @@
 
 # Set CXX to be clang++ or g++ or mpic++ -- compare kickoff makefile.
 # CXX	= c++  
-CXX = clang++
-# CXX = g++
+# CXX = clang++
+CXX = g++
 
 CFLAGS	= -O3 --std=c++17 -Wall
 PROGS	= matrix_sequential matrix_generator matrix_rayon matrix_openmp

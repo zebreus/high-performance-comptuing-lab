@@ -102,8 +102,9 @@ int main(int argc, char** argv) {
     auto result = multiply(m1, m2);
 
     auto milestoneCalculate = std::chrono::system_clock::now();
-    std::cout << std::fixed << std::setprecision(8)
-              << secondsSince(milestoneSetup, milestoneCalculate) << std::endl;
+    std::cout << std::fixed << std::setprecision(12)
+              << secondsSince(milestoneSetup, milestoneCalculate) << ","
+              << result.value() << std::endl;
     std::cerr << std::fixed << std::setprecision(8) << "calculation time = "
               << secondsSince(milestoneSetup, milestoneCalculate) << " seconds"
               << std::endl;

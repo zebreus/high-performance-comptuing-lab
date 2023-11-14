@@ -33,16 +33,16 @@ fn main() {
     let matrix_a = Matrix::from_file(cli.matrix_a.as_str()).unwrap();
     let matrix_b = Matrix::from_file(cli.matrix_a.as_str()).unwrap();
     let setup_duration = before_setup.elapsed();
-    eprintln!("setup time = {:.8} seconds", setup_duration.as_secs_f64());
+    eprintln!("setup time = {} seconds", setup_duration.as_secs_f64());
 
     let before_calculation = Instant::now();
     let result = matrix_a.multiply(&matrix_b).unwrap();
     let calculation_duration = before_calculation.elapsed();
-    println!("{:?}", calculation_duration.as_secs_f64());
+    println!("{},{}", calculation_duration.as_secs_f64(), result.sum());
     eprintln!(
-        "calculation time = {:.8} seconds",
+        "calculation time = {} seconds",
         calculation_duration.as_secs_f64()
     );
 
-    eprintln!("sum of the result: {:.8}", result.sum());
+    eprintln!("sum of the result = {}", result.sum());
 }

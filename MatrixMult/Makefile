@@ -37,6 +37,10 @@ all: $(PROGS) $(TESTFILES)
 matrix_generator:  matrix_generator.o CMatrix.o
 	$(CXX) $(LDFLAGS) -o $@  $@.o  CMatrix.o
 
+matrix_rayon: $(shell find rust-matrix-multiplication -type f)
+	cd rust-matrix-multiplication && cargo build --release
+	cp ../target/release/rust-matrix-multiplication matrix_rayon
+
 # This is more accurate (and thus does less work)
 matrix_%: matrix_%.o CMatrix.o
 	$(CXX) $(LDFLAGS) -fopenmp -o $@  $@.o  CMatrix.o
@@ -76,4 +80,3 @@ else # if srun is available, use it -- e.g. at the GSI!
 #      run with one process (-n 1) and one thread (-c 1) (on the debug partition)
 	srun -p debug -n 1 -c 1 -- ./$< $(TESTFILES)
 endif
-

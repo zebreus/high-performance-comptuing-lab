@@ -22,6 +22,8 @@ struct Cli {
 fn main() {
     let cli = Cli::parse();
 
+    let before_setup = Instant::now();
+
     // Put the correct number of threads into rayons global thread pool
     rayon::ThreadPoolBuilder::new()
         .num_threads(cli.threads.unwrap_or(1))
@@ -30,11 +32,17 @@ fn main() {
 
     let matrix_a = Matrix::from_file(cli.matrix_a.as_str()).unwrap();
     let matrix_b = Matrix::from_file(cli.matrix_a.as_str()).unwrap();
+    let setup_duration = before_setup.elapsed();
+    eprintln!("setup time = {:.8} seconds", setup_duration.as_secs_f64());
 
-    let start = Instant::now();
+    let before_calculation = Instant::now();
     let result = matrix_a.multiply(&matrix_b).unwrap();
-    let duration = start.elapsed();
+    let calculation_duration = before_calculation.elapsed();
+    println!("{:?}", calculation_duration.as_secs_f64());
+    eprintln!(
+        "calculation time = {:.8} seconds",
+        calculation_duration.as_secs_f64()
+    );
 
-    println!("{:?}", duration.as_secs_f64());
-    eprintln!("Sum of all values: {:?}", result.sum());
+    eprintln!("sum of the result: {:.8}", result.sum());
 }

@@ -35,9 +35,11 @@ inline double secondsSince(
 }
 
 // tag::algorithm[]
-CMatrix multiply(CMatrix const& m1, CMatrix const& m2) {
+CMatrix
+multiply(CMatrix const& m1, CMatrix const& m2, unsigned int numberOfThreads) {
     CMatrix result(m2.width, m1.height);  // allocate memory
-#pragma omp parallel for shared(m1, m2, result) collapse(2) schedule(static)
+#pragma omp parallel for shared(m1, m2, result) collapse(2) schedule(static) \
+    num_threads(numberOfThreads)
     for (unsigned int row = 0; row < m1.height; row++) {
         for (unsigned int col = 0; col < m2.width; col++) {
             double sum = 0.0;
@@ -61,7 +63,7 @@ int main(int argc, char** argv) {
     options.add_options()
         ("a,matrix-a", "File containing the first matrix", cxxopts::value<std::string>())
         ("b,matrix-b", "File containing the second matrix", cxxopts::value<std::string>())
-        ("t,threads", "Set the number of threads to use", cxxopts::value<unsigned int>()->default_value(0))
+        ("t,threads", "Set the number of threads to use", cxxopts::value<unsigned int>()->default_value("1"))
         ("h,help", "Print usage")
     ;
 
@@ -88,32 +90,22 @@ int main(int argc, char** argv) {
         );
 
     auto milestoneSetup = std::chrono::system_clock::now();
-    std::cerr << std::setprecision(8)
+    std::cerr << std::fixed << std::setprecision(8)
               << "setup time = " << secondsSince(startTime, milestoneSetup)
-              << " seconds." << std::endl;
+              << " seconds" << std::endl;
     // We dont want to measure the printing time
     milestoneSetup = std::chrono::system_clock::now();
 
-    auto result = multiply(m1, m2);
+    auto result = multiply(m1, m2, numberOfThreads);
 
     auto milestoneCalculate = std::chrono::system_clock::now();
-    std::cerr << std::setprecision(8) << "calculation time = "
-              << secondsSince(milestoneSetup, milestoneCalculate) << " seconds."
+    std::cout << std::fixed << std::setprecision(8)
+              << secondsSince(milestoneSetup, milestoneCalculate) << std::endl;
+    std::cerr << std::fixed << std::setprecision(8) << "calculation time = "
+              << secondsSince(milestoneSetup, milestoneCalculate) << " seconds"
               << std::endl;
 
-    std::cerr << "Matrix value = " << result.value() << std::endl;
-
-    std::cout << std::setprecision(8)
-              << secondsSince(milestoneSetup, milestoneCalculate) << std::endl;
-
-    auto endTime = std::chrono::system_clock::now();
-    std::cerr << std::setprecision(8)
-              << "output time = " << secondsSince(milestoneCalculate, endTime)
-              << " seconds." << std::endl;
-    std::cerr << std::setprecision(8)
-              << "Total wall clock time = " << secondsSince(startTime, endTime)
-              << " seconds." << std::endl;
-
+    std::cerr << "sum of the result: " << result.value() << std::endl;
     return 0;
 }
 

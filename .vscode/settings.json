@@ -57,7 +57,12 @@
     "stop_token": "cpp",
     "streambuf": "cpp",
     "thread": "cpp",
-    "typeinfo": "cpp"
+    "typeinfo": "cpp",
+    "bitset": "cpp",
+    "cstring": "cpp",
+    "unordered_set": "cpp",
+    "optional": "cpp",
+    "regex": "cpp"
   },
   "asciidoc.extensions.enableKroki": true,
   "asciidoc.preview.asciidoctorAttributes": {
@@ -75,5 +80,5 @@
   "[cpp]": {
     "editor.defaultFormatter": "xaver.clang-format",
     "editor.formatOnSave": true
-  },
+  }
 }

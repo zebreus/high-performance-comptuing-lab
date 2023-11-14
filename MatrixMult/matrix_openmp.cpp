@@ -1,8 +1,9 @@
 // file...: matrix_sequential.cpp
-// desc...: The reference solution for sequential matrix multiplication
+// desc...: Naive openMP approach; Seems to deliver the expected results
 // oct-2010 | a.knirsch@fbi.h-da.de
 // oct-2021 | Major Revision -- Simplified CMatrix class (!) | ronald.moore@h-da.de
 
+#include <omp.h>
 #include <stdlib.h>  // for exit()
 
 #include <chrono>
@@ -34,6 +35,19 @@ inline double secondsSince(
 
 // +++ main starts here +++
 int main(int argc, char** argv) {
+    // constexpr int is_parallel = 1;
+    // unsigned int sum = 0;
+
+    // #pragma omp parallel reduction(+: sum)
+    // {
+    //     std::cout << "Hello World from thread = " << omp_get_thread_num() << std::endl;
+    //     sum =+ 10;
+    // }
+
+    // std::cout << "Sum is = " << sum << std::endl;
+
+    // std::exit(0);
+
     // process arguments
     if (argc != 3)
         errorExit(argv[0], "wrong number of arguments.");
@@ -57,16 +71,20 @@ int main(int argc, char** argv) {
     // --- multiply matrices ---
     CMatrix result(m2.width, m1.height);  // allocate memory
 
+    double sum = 0.0;
+#pragma omp parallel for shared(m1, m2, result) private(sum) collapse(2)
     for (unsigned int row = 0; row < m1.height; row++) {
         for (unsigned int col = 0; col < m2.width; col++) {
-            double sum = 0.0;
             for (unsigned int dot = 0; dot < m2.height; dot++) {
                 // cout <<  "m1[" << row << "][" << dot << "] = " << m1[row][dot]
                 //  << ", m2[" << dot << "][" << col << "] = " << m2[dot][col] << endl;
                 sum += m1[row][dot] * m2[dot][col];
             }
-            // cout << "result[" << row <<" ][" << col << "] = " << sum;
+            // std::cout << "result[" << row << " ][" << col << "] = " << sum
+            //           << '/n' << std::endl;
+
             result[row][col] = sum;
+            sum = 0.0;
         }
     }
 

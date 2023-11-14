@@ -14,7 +14,7 @@ CXX = clang++
 CFLAGS	= -O3 --std=c++17 -Wall
 PROGS	= matrix_sequential matrix_generator
 OBJS	= matrix_sequential.o matrix_generator.o CMatrix.o
-TESTFILES = matrix-A-10x10.txt matrix-B-10x10.txt
+TESTFILES = matrix-A-2000x2000.txt matrix-B-2000x2000.txt
 
 CFLAGS	+= -I/usr/local/include/
 LDFLAGS += -L/usr/local/lib/
@@ -32,21 +32,23 @@ all: $(PROGS) $(TESTFILES)
 # $(PROGS): $(OBJS)
 # 	$(CXX) $(LDFLAGS) -o $@  $@.o  CMatrix.o
 
-# This is more accurate (and thus does less work)
-matrix_sequential: matrix_sequential.o CMatrix.o
-	$(CXX) $(LDFLAGS) -o $@  $@.o  CMatrix.o
+
 
 matrix_generator:  matrix_generator.o CMatrix.o
 	$(CXX) $(LDFLAGS) -o $@  $@.o  CMatrix.o
+
+# This is more accurate (and thus does less work)
+matrix_%: matrix_%.o CMatrix.o
+	$(CXX) $(LDFLAGS) -fopenmp -o $@  $@.o  CMatrix.o
 
 CMatrix.o: CMatrix.cpp CMatrix.h
 	$(CXX) $(CFLAGS) -c -o $@ $<
 
 %.o: %.cpp CMatrix.h
-	$(CXX) $(CFLAGS) -c -o $@ $<
+	$(CXX) $(CFLAGS) -fopenmp -c -o $@ $<
 
 $(TESTFILES): matrix_generator
-	./matrix_generator 10 10 >$@
+	./matrix_generator 2000 2000 >$@
 
 clean:
 	-rm -rf $(PROGS) *~ *.o ._*
@@ -57,9 +59,21 @@ distclean: clean
 test:  $(PROGS) $(TESTFILES)
 	echo "Calling matrix_sequential..."
 ifeq (, $(shell which srun)) # When srun is not available, assume we want to run locally
-	./matrix_sequential $(TESTFILES)
+	./matrix_sequential $(TESTFILES) > /dev/null
 else # if srun is available, use it -- e.g. at the GSI!
 #      run with one process (-n 1) and one thread (-c 1) (on the debug partition)
 	srun -p debug -n 1 -c 1 -- ./matrix_sequential $(TESTFILES)
+endif
+
+run-%: matrix_%
+	./$<
+
+test-%: matrix_% $(PROGS) $(TESTFILES)
+	echo "Calling $<..."
+ifeq (, $(shell which srun)) # When srun is not available, assume we want to run locally
+	./$< $(TESTFILES) > /dev/null
+else # if srun is available, use it -- e.g. at the GSI!
+#      run with one process (-n 1) and one thread (-c 1) (on the debug partition)
+	srun -p debug -n 1 -c 1 -- ./$< $(TESTFILES)
 endif
 

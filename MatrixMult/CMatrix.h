@@ -43,6 +43,14 @@ class CMatrix {
         return container + (rowNumber * width);
     }
 
+    const double value() const {
+        double sum = 0;
+        for (unsigned int i = 0; i < (height * width); i++) {
+            sum += container[i];
+        }
+        return sum;
+    }
+
     // Remainder is public for simplification
     // You might want to consider making everything below here private...
     unsigned int height;

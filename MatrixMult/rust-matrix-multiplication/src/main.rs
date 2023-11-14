@@ -35,6 +35,6 @@ fn main() {
     let result = matrix_a.multiply(&matrix_b).unwrap();
     let duration = start.elapsed();
 
-    eprintln!("{:?}", duration.as_secs_f64());
-    println!("Sum of all values: {:?}", result.sum());
+    println!("{:?}", duration.as_secs_f64());
+    eprintln!("Sum of all values: {:?}", result.sum());
 }

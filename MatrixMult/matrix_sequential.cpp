@@ -10,6 +10,7 @@
 #include <iostream>
 
 #include "CMatrix.h"
+#include "cxxopts.hpp"
 
 void errorExit(const char* progname, const char* error) {
     if (error != NULL) {
@@ -51,14 +52,39 @@ CMatrix multiply(CMatrix const& m1, CMatrix const& m2) {
 
 // +++ main starts here +++
 int main(int argc, char** argv) {
-    // process arguments
-    if (argc != 3)
-        errorExit(argv[0], "wrong number of arguments.");
+    cxxopts::Options options(
+        "matrix_sequential",
+        "Multiply two matrices in C++ without parallelization"
+    );
+    options.add_options()
+        ("a,matrix-a", "File containing the first matrix", cxxopts::value<std::string>())
+        ("b,matrix-b", "File containing the second matrix", cxxopts::value<std::string>())
+        ("t,threads", "Only provided for compatibility", cxxopts::value<unsigned int>()->default_value("1"))
+        ("h,help", "Print usage")
+    ;
+
+    options.parse_positional({"matrix-a", "matrix-b"});
+    auto parsedOptions = options.parse(argc, argv);
+    if (parsedOptions.count("help")) {
+        std::cout << options.help() << std::endl;
+        exit(0);
+    }
+
+    auto numberOfThreads = parsedOptions["threads"].as<unsigned int>();
+    auto pathMatrixA = parsedOptions["matrix-a"].as<std::string>();
+    auto pathMatrixB = parsedOptions["matrix-b"].as<std::string>();
+
+    if (numberOfThreads != 1) {
+        errorExit(
+            argv[0],
+            "matrix_sequential does only support a single thread."
+        );
+    }
 
     auto startTime = std::chrono::system_clock::now();
 
-    CMatrix m1(argv[1]);  // read 1st matrix
-    CMatrix m2(argv[2]);  // read 2nd matrix
+    CMatrix m1(pathMatrixA.data());  // read 1st matrix
+    CMatrix m2(pathMatrixB.data());  // read 2nd matrix
 
     if (m1.width != m2.height)  // check compatibility
         errorExit(
@@ -70,6 +96,8 @@ int main(int argc, char** argv) {
     std::cerr << std::setprecision(8)
               << "setup time = " << secondsSince(startTime, milestoneSetup)
               << " seconds." << std::endl;
+    // We dont want to measure the printing time
+    milestoneSetup = std::chrono::system_clock::now();
 
     auto result = multiply(m1, m2);
 
@@ -80,8 +108,8 @@ int main(int argc, char** argv) {
 
     std::cerr << "Matrix value = " << result.value() << std::endl;
 
-    // print matrix
-    result.print();
+    std::cout << std::setprecision(8)
+              << secondsSince(milestoneSetup, milestoneCalculate) << std::endl;
 
     auto endTime = std::chrono::system_clock::now();
     std::cerr << std::setprecision(8)

@@ -33,8 +33,7 @@ bool convertToSize(const char* str, unsigned int& number) {
 }
 
 void createRandomDouble(double& number) {
-    number = rand();
-    number = number / rand() * 30.14;
+    number = ((double)rand() / (double)RAND_MAX) * 1000.0;
     if (rand() % 2) {
         number *= -1;
     }
@@ -70,7 +69,7 @@ int main(int argc, char** argv) {
     // print matrix
     cout << width << " " << height << endl;
     for (unsigned int i = 0; i < containersize; i++) {
-        cout << container[i];
+        cout << fixed << container[i];
         if (((i + 1) % width) == 0) {
             cout << endl;
         } else {

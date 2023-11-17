@@ -60,6 +60,7 @@ int main(int argc, char** argv) {
         ("a,matrix-a", "File containing the first matrix", cxxopts::value<std::string>())
         ("b,matrix-b", "File containing the second matrix", cxxopts::value<std::string>())
         ("t,threads", "Only provided for compatibility", cxxopts::value<unsigned int>()->default_value("1"))
+        ("p,print-matrix", "Print the result matrix instead of the time to stdout", cxxopts::value<bool>()->default_value("0"))
         ("h,help", "Print usage")
     ;
 
@@ -73,6 +74,7 @@ int main(int argc, char** argv) {
     auto numberOfThreads = parsedOptions["threads"].as<unsigned int>();
     auto pathMatrixA = parsedOptions["matrix-a"].as<std::string>();
     auto pathMatrixB = parsedOptions["matrix-b"].as<std::string>();
+    auto printMatrix = parsedOptions["print-matrix"].as<bool>();
 
     if (numberOfThreads != 1) {
         errorExit(
@@ -102,9 +104,13 @@ int main(int argc, char** argv) {
     auto result = multiply(m1, m2);
 
     auto milestoneCalculate = std::chrono::system_clock::now();
-    std::cout << std::fixed << std::setprecision(12)
-              << secondsSince(milestoneSetup, milestoneCalculate) << ","
-              << result.value() << std::endl;
+    if (printMatrix) {
+        result.print();
+    } else {
+        std::cout << std::fixed << std::setprecision(12)
+                  << secondsSince(milestoneSetup, milestoneCalculate) << ","
+                  << result.value() << std::endl;
+    }
     std::cerr << std::fixed << std::setprecision(8) << "calculation time = "
               << secondsSince(milestoneSetup, milestoneCalculate) << " seconds"
               << std::endl;

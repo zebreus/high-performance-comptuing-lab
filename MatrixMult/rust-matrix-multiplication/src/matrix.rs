@@ -1,3 +1,5 @@
+use std::fmt;
+
 pub mod multiply;
 
 #[derive(Debug, PartialEq)]
@@ -61,6 +63,19 @@ impl Matrix {
 impl Into<Matrix> for &str {
     fn into(self) -> Matrix {
         list_parser::matrix(self).unwrap()
+    }
+}
+
+impl fmt::Display for Matrix {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "{} {}", self.cols, self.rows)?;
+        for row in self.data.chunks(self.cols) {
+            for value in row {
+                write!(f, "{:.32} ", value)?;
+            }
+            writeln!(f)?;
+        }
+        Ok(())
     }
 }
 

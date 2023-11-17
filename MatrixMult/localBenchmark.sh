@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 filename=$1
 
-RUNS=20
+RUNS=10
 
-echo "name,threads,matrix_size,duration" >$filename
+echo "name,threads,matrix_size,run,duration,sum" >$filename
 
 for NUM_THREADS in 1 2 4 8; do
     TEST_RUN=1
@@ -11,7 +11,7 @@ for NUM_THREADS in 1 2 4 8; do
         # JOBNAME="kickoff-$NUM_THREADS-$TEST_RUN"
 
         # sbatch --partition=main --job-name=$JOBNAME --cpus-per-task=$NUM_THREADS --ntasks=1 --nodes=1 --output %j.out -- ./batchJobs.sh $NUM_THREADS $filename
-        bash ./compareRayonAndOpenmp.sh $NUM_THREADS $filename
+        bash ./compareRayonAndOpenmp.sh $NUM_THREADS $filename $TEST_RUN
 
         ((TEST_RUN++))
     done

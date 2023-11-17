@@ -24,6 +24,11 @@ if ! test -x "./matrix_openmp"; then
     exit 1
 fi
 
+if ! test -x "./matrix_openmp_inverted"; then
+    echo "./matrix_openmp_inverted is missing or not executable"
+    exit 1
+fi
+
 if ! test -x "./matrix_rayon"; then
     echo "./matrix_rayon is missing or not executable"
     exit 1
@@ -41,16 +46,18 @@ fi
 
 WORK_DIR=$(mktemp -d --tmpdir=$LUSTRE_HOME)
 mkdir -p $WORK_DIR
+echo $(date) >>$WORK_DIR/date.txt
 cd $WORK_DIR
 
 cp $INITIAL_DIR/matrix_openmp .
+cp $INITIAL_DIR/matrix_openmp_inverted .
 cp $INITIAL_DIR/matrix_rayon .
 cp $INITIAL_DIR/matrix_generator .
 cp $INITIAL_DIR/compareRayonAndOpenmp.sh .
 chmod a+x ./compareRayonAndOpenmp.sh
 output_filename=$WORK_DIR/results.csv
 
-RUNS=20
+RUNS=30
 
 echo "name,threads,matrix_size,run,duration,sum" >$output_filename
 

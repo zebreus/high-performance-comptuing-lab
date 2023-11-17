@@ -1,10 +1,18 @@
 pub mod matrix;
-
 use std::time::Instant;
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use matrix::Matrix;
 
+#[derive(ValueEnum, Debug, PartialEq, Clone)]
+#[clap(rename_all = "kebab_case")]
+enum MultiplyImplementation {
+    NoIndices,
+    FaithfulPairs,
+    FaithfulMutex,
+    FaithfulUnsafe,
+    FaithfulIterators,
+}
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
@@ -21,6 +29,22 @@ struct Cli {
     /// Print the result matrix instead of the time to stdout
     #[arg(short, long)]
     print_matrix: Option<bool>,
+
+    /// File containing the second matrix
+    #[arg(short, long, default_value = "no_indices")]
+    algorithm: MultiplyImplementation,
+}
+
+impl MultiplyImplementation {
+    fn multiply(&self, a: &Matrix, b: &Matrix) -> Matrix {
+        match self {
+            MultiplyImplementation::NoIndices => a.multiply(b),
+            MultiplyImplementation::FaithfulPairs => a.multiply_faithful_pairs(b),
+            MultiplyImplementation::FaithfulMutex => a.multiply_faithful_mutex(b),
+            MultiplyImplementation::FaithfulUnsafe => a.multiply_faithful_unsafe(b),
+            MultiplyImplementation::FaithfulIterators => a.multiply_faithful_iterators(b),
+        }
+    }
 }
 
 fn main() {
@@ -35,13 +59,16 @@ fn main() {
         .unwrap();
 
     let matrix_a = Matrix::from_file(cli.matrix_a.as_str()).unwrap();
-    let matrix_b = Matrix::from_file(cli.matrix_a.as_str()).unwrap();
+    let matrix_b = Matrix::from_file(cli.matrix_b.as_str()).unwrap();
     let setup_duration = before_setup.elapsed();
     let print_matrix = cli.print_matrix.unwrap_or(false);
+    let algorithm = cli.algorithm;
     eprintln!("setup time = {} seconds", setup_duration.as_secs_f64());
 
+    assert_eq!(matrix_a.cols, matrix_b.rows);
+
     let before_calculation = Instant::now();
-    let result = matrix_a.multiply(&matrix_b).unwrap();
+    let result = algorithm.multiply(&matrix_a, &matrix_b);
     let calculation_duration = before_calculation.elapsed();
     if print_matrix {
         print!("{}", result);

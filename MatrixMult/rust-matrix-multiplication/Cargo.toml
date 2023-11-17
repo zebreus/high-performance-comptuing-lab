@@ -8,5 +8,6 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4.4.7", features = ["derive"] }
+itertools = "0.12.0"
 peg = "0.8.2"
 rayon = "1.8.0"

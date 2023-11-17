@@ -4,8 +4,8 @@ pub mod multiply;
 
 #[derive(Debug, PartialEq)]
 pub struct Matrix {
-    rows: usize,
-    cols: usize,
+    pub rows: usize,
+    pub cols: usize,
     data: Vec<f64>,
 }
 
@@ -50,6 +50,16 @@ impl Matrix {
             .collect();
 
         Matrix { rows, cols, data }
+    }
+
+    pub fn read_at(&self, row: &usize, col: &usize) -> &f64 {
+        &self.data[row * self.cols + col]
+    }
+
+    /// Write a value into the matrix at the given position.
+    /// TODO: implement as access operator
+    pub fn write_at(&mut self, row: &usize, col: &usize, value: f64) {
+        self.data[row * self.cols + col] = value;
     }
 
     /// Get the sum of all values in the matrix.

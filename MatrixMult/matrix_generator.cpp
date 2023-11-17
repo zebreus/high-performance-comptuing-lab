@@ -6,6 +6,7 @@
 #include <stdlib.h>
 
 #include <iostream>
+#include <random>
 #include <sstream>
 
 #include "CMatrix.h"
@@ -33,10 +34,10 @@ bool convertToSize(const char* str, unsigned int& number) {
 }
 
 void createRandomDouble(double& number) {
-    number = ((double)rand() / (double)RAND_MAX) * 1000.0;
-    if (rand() % 2) {
-        number *= -1;
-    }
+    static std::random_device rd {};
+    static std::mt19937 gen {rd()};
+    static std::uniform_real_distribution<> d(-10000.0, 10000);
+    number = d(gen);
 }
 
 // +++ main starts here +++
@@ -46,7 +47,6 @@ int main(int argc, char** argv) {
     unsigned int containersize = 0;
     unsigned int width = 0;
     unsigned int height = 0;
-    srand((unsigned)time(0));  // seed randomizer
 
     // process arguments
     if (argc != 3) {

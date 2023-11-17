@@ -27,9 +27,9 @@ class CMatrix {
     ~CMatrix();
 
     // size of matrix (amount of values)
-    unsigned int size() const {
-        return height * width;
-    }
+    // unsigned int size() const {
+    //     return height * width;
+    // }
 
     // print matrix to stdout
     void print() const;
@@ -56,10 +56,25 @@ class CMatrix {
         return sum;
     }
 
+    void invert() {
+        double* newContainer = new double[size];
+        for (unsigned int i = 0; i < size; i++) {
+            auto new_index = (i % width) * height + (i / width);
+            newContainer[i] = container[new_index];
+        }
+        double* oldContainer = container;
+        this->container = newContainer;
+        delete[] oldContainer;
+        unsigned int tmp = width;
+        width = height;
+        height = tmp;
+    }
+
     // Remainder is public for simplification
     // You might want to consider making everything below here private...
     unsigned int height;
     unsigned int width;
+    unsigned int size;
 
     // We COULD declare the matrix as double[ height ][ width ] (dynamically)
     // but we do it the HARD way to make it very clear that all the doubles are

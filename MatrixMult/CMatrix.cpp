@@ -17,6 +17,7 @@
 CMatrix::CMatrix(const char* filename) {
     width = 0;
     height = 0;
+    size = 0;
     FILE* pFile = nullptr;
     double value = 0.0;
     unsigned int i = 0;
@@ -30,13 +31,14 @@ CMatrix::CMatrix(const char* filename) {
         assert(1 == status);
         status = fscanf(pFile, "%u", &height);
         assert(1 == status);
+        size = width * height;
 
-        container = new double[size()];
+        container = new double[size];
         while (EOF != fscanf(pFile, "%lf", &value)) {
             container[i++] = value;
         }
         fclose(pFile);
-        assert(size() == i);
+        assert(size == i);
     }
 }
 
@@ -44,8 +46,9 @@ CMatrix::CMatrix(const char* filename) {
 CMatrix::CMatrix(unsigned int w, unsigned int h) {
     width = w;
     height = h;
-    container = new double[size()];
-    for (unsigned int i = 0; i < size(); i++) {
+    size = w * h;
+    container = new double[size];
+    for (unsigned int i = 0; i < size; i++) {
         container[i] = 0.0;
     }
 }
@@ -55,8 +58,9 @@ CMatrix::CMatrix(const CMatrix& rhs)  // rhs == right hand side
 {
     width = rhs.width;
     height = rhs.height;
-    container = new double[size()];
-    for (unsigned int i = 0; i < size(); i++)
+    size = rhs.width * rhs.height;
+    container = new double[size];
+    for (unsigned int i = 0; i < size; i++)
         container[i] = rhs.container[i];
 }
 
@@ -66,9 +70,10 @@ CMatrix& CMatrix::operator=(const CMatrix& rhs) {
         delete[] container;
         width = rhs.width;
         height = rhs.height;
-        container = new double[size()];
+        size = rhs.width * rhs.height;
+        container = new double[size];
     };
-    for (unsigned int i = 0; i < size(); i++)
+    for (unsigned int i = 0; i < size; i++)
         container[i] = rhs.container[i];
     return *this;
 }
@@ -82,7 +87,7 @@ CMatrix::~CMatrix() {
 // Output
 void CMatrix::print() const {
     std::cout << width << " " << height << std::endl;
-    for (unsigned int i = 0; i < size(); i++) {
+    for (unsigned int i = 0; i < size; i++) {
         std::cout << container[i];
         if (0 == ((i + 1) % width))
             std::cout << std::endl;

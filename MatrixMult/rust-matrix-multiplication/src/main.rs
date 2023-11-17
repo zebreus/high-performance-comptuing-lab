@@ -31,7 +31,7 @@ struct Cli {
     print_matrix: Option<bool>,
 
     /// File containing the second matrix
-    #[arg(short, long, default_value = "no_indices")]
+    #[arg(short, long, default_value = "no-indices")]
     algorithm: MultiplyImplementation,
 }
 

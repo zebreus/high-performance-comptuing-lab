@@ -13,11 +13,27 @@ const resultsGcc = parse(await Deno.readTextFile("KickOff/results_gcc.csv"), {
   skipFirstRow: true,
   columns: kickoffColumns,
 });
+
 const resultsVirgo = parse(
   await Deno.readTextFile("KickOff/results_virgo.csv"),
   {
     skipFirstRow: true,
     columns: ["name", "threads", "n", "duration"] as const,
+  }
+);
+
+const resultsVirgoMatrix = parse(
+  await Deno.readTextFile("MatrixMult/results_virgo.csv"),
+  {
+    skipFirstRow: true,
+    columns: [
+      "name",
+      "threads",
+      "matrix_size",
+      "duration",
+      "run",
+      "sum",
+    ] as const,
   }
 );
 
@@ -106,35 +122,35 @@ await Deno.writeTextFile(
   })
 );
 
-const performanceLowThreads = resultsVirgo
+const performanceLowThreads = resultsVirgoMatrix
   .filter((x) => x.threads === "1")
   .toSorted((a, b) => Number.parseFloat(a.n) - Number.parseFloat(b.n))
   .map(({ name, duration, n }) => ({ name, duration, n }));
 await Deno.writeTextFile(
   "assets/performance-low-threads.csv",
   stringify(performanceLowThreads, {
-    columns: ["name", "duration", "n"],
+    columns: ["name", "duration", "matrix_size"],
   })
 );
 
-const performanceMediumThreads = resultsVirgo
+const performanceMediumThreads = resultsVirgoMatrix
   .filter((x) => x.threads === "8")
   .toSorted((a, b) => Number.parseFloat(a.n) - Number.parseFloat(b.n))
   .map(({ name, duration, n }) => ({ name, duration, n }));
 await Deno.writeTextFile(
   "assets/performance-medium-threads.csv",
   stringify(performanceMediumThreads, {
-    columns: ["name", "duration", "n"],
+    columns: ["name", "duration", "matrix_size"],
   })
 );
 
-const performanceHighThreads = resultsVirgo
+const performanceHighThreads = resultsVirgoMatrix
   .filter((x) => x.threads === "128")
   .toSorted((a, b) => Number.parseFloat(a.n) - Number.parseFloat(b.n))
   .map(({ name, duration, n }) => ({ name, duration, n }));
 await Deno.writeTextFile(
   "assets/performance-high-threads.csv",
   stringify(performanceHighThreads, {
-    columns: ["name", "duration", "n"],
+    columns: ["name", "duration", "matrix_size"],
   })
 );

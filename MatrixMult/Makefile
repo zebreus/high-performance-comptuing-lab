@@ -12,7 +12,7 @@
 CXX = g++
 
 CFLAGS	= -O3 --std=c++17 -Wall
-PROGS	= matrix_sequential matrix_generator matrix_rayon matrix_openmp matrix_openmp_inverted
+PROGS	= matrix_sequential matrix_generator matrix_rayon matrix_openmp matrix_openmp_transposed
 OBJS	= matrix_sequential.o matrix_generator.o CMatrix.o
 TESTFILES = matrix-A-1000x1000.txt matrix-B-1000x1000.txt
 

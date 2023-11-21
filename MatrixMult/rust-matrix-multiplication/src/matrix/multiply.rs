@@ -8,7 +8,7 @@ impl Matrix {
     ///
     /// I would think that this one is quite performant, as we never access memory by an index
     pub fn multiply(&self, other: &Matrix) -> Matrix {
-        let inverted_other = other.invert();
+        let transposed_other = other.invert();
 
         let dot_product_length = self.cols;
 
@@ -16,7 +16,7 @@ impl Matrix {
             .data
             .par_chunks_exact(dot_product_length)
             .map(|row| {
-                inverted_other
+                transposed_other
                     .data
                     .par_chunks_exact(dot_product_length)
                     .map(|column| row.iter().zip(column.iter()).map(|(a, b)| a * b).sum())

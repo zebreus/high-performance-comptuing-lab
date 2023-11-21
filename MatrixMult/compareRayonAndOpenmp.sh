@@ -20,9 +20,9 @@ for MATRIX_SIZE in 1 2 4 8 16 32 64 128 256 512 1024 2048 4096; do
     ./matrix_openmp $MATRIX_A_FILE $MATRIX_B_FILE --threads $NUM_THREADS >>$filename
     echo "" >>$filename
 
-    echo "Running openmp-inverted ($NUM_THREADS threads) on a ${MATRIX_SIZE}x${MATRIX_SIZE} matrix"
-    echo -ne openmp-inverted,$NUM_THREADS,$MATRIX_SIZE,$RUN_ID, >>$filename
-    ./matrix_openmp_inverted $MATRIX_A_FILE $MATRIX_B_FILE --threads $NUM_THREADS >>$filename
+    echo "Running openmp-transposed ($NUM_THREADS threads) on a ${MATRIX_SIZE}x${MATRIX_SIZE} matrix"
+    echo -ne openmp-transposed,$NUM_THREADS,$MATRIX_SIZE,$RUN_ID, >>$filename
+    ./matrix_openmp_transposed $MATRIX_A_FILE $MATRIX_B_FILE --threads $NUM_THREADS >>$filename
     echo "" >>$filename
 
     echo "Running rayon ($NUM_THREADS threads) on a ${MATRIX_SIZE}x${MATRIX_SIZE} matrix"

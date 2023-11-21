@@ -24,8 +24,8 @@ if ! test -x "./matrix_openmp"; then
     exit 1
 fi
 
-if ! test -x "./matrix_openmp_inverted"; then
-    echo "./matrix_openmp_inverted is missing or not executable"
+if ! test -x "./matrix_openmp_transposed"; then
+    echo "./matrix_openmp_transposed is missing or not executable"
     exit 1
 fi
 
@@ -50,7 +50,7 @@ echo $(date) >>$WORK_DIR/date.txt
 cd $WORK_DIR
 
 cp $INITIAL_DIR/matrix_openmp .
-cp $INITIAL_DIR/matrix_openmp_inverted .
+cp $INITIAL_DIR/matrix_openmp_transposed .
 cp $INITIAL_DIR/matrix_rayon .
 cp $INITIAL_DIR/matrix_generator .
 cp $INITIAL_DIR/compareRayonAndOpenmp.sh .

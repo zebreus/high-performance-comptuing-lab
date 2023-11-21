@@ -38,7 +38,7 @@ inline double secondsSince(
 CMatrix multiply(CMatrix const& m1, CMatrix& m2, unsigned int numberOfThreads) {
     CMatrix result(m2.width, m1.height);  // allocate memory
 
-    m2.invert();
+    m2.transpose();
 
 #pragma omp parallel for collapse(2) schedule(static) \
     num_threads(numberOfThreads)

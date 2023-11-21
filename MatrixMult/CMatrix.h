@@ -56,7 +56,7 @@ class CMatrix {
         return sum;
     }
 
-    void invert() {
+    void transpose() {
         double* newContainer = new double[size];
         for (unsigned int i = 0; i < size; i++) {
             auto new_index = (i % width) * height + (i / width);

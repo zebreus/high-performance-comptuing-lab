@@ -152,7 +152,7 @@ await Deno.writeTextFile(
 
 const performanceHighThreads = resultsVirgoMatrix
   .filter((x) => x.threads === "64")
-  .filter((x) => ["openmp-inverted", "rayon", "openmp"].includes(x.name))
+  .filter((x) => ["openmp-transposed", "rayon", "openmp"].includes(x.name))
   .toSorted(
     (a, b) =>
       Number.parseFloat(a.matrix_size) - Number.parseFloat(b.matrix_size)

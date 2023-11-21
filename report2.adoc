@@ -57,6 +57,12 @@ include::MatrixMult/matrix_openmp.cpp[tag=algorithm]
 ----
 
 
+=== Compare the transposed rust and omp implementation
+
+=== Compare the untransposed omp, unsafe rust, paired rust and collect rust implementations
+
+=== Compare the rust implementations using mutexes with itself?
+
 == Appendix
 
 [#our-computers,cols="1,2,2"]

@@ -30,8 +30,8 @@ const resultsVirgoMatrix = parse(
       "name",
       "threads",
       "matrix_size",
-      "duration",
       "run",
+      "duration",
       "sum",
     ] as const,
   }
@@ -124,8 +124,11 @@ await Deno.writeTextFile(
 
 const performanceLowThreads = resultsVirgoMatrix
   .filter((x) => x.threads === "1")
-  .toSorted((a, b) => Number.parseFloat(a.n) - Number.parseFloat(b.n))
-  .map(({ name, duration, n }) => ({ name, duration, n }));
+  .toSorted(
+    (a, b) =>
+      Number.parseFloat(a.matrix_size) - Number.parseFloat(b.matrix_size)
+  )
+  .map(({ name, duration, matrix_size }) => ({ name, duration, matrix_size }));
 await Deno.writeTextFile(
   "assets/performance-low-threads.csv",
   stringify(performanceLowThreads, {
@@ -135,8 +138,11 @@ await Deno.writeTextFile(
 
 const performanceMediumThreads = resultsVirgoMatrix
   .filter((x) => x.threads === "8")
-  .toSorted((a, b) => Number.parseFloat(a.n) - Number.parseFloat(b.n))
-  .map(({ name, duration, n }) => ({ name, duration, n }));
+  .toSorted(
+    (a, b) =>
+      Number.parseFloat(a.matrix_size) - Number.parseFloat(b.matrix_size)
+  )
+  .map(({ name, duration, matrix_size }) => ({ name, duration, matrix_size }));
 await Deno.writeTextFile(
   "assets/performance-medium-threads.csv",
   stringify(performanceMediumThreads, {
@@ -145,9 +151,13 @@ await Deno.writeTextFile(
 );
 
 const performanceHighThreads = resultsVirgoMatrix
-  .filter((x) => x.threads === "128")
-  .toSorted((a, b) => Number.parseFloat(a.n) - Number.parseFloat(b.n))
-  .map(({ name, duration, n }) => ({ name, duration, n }));
+  .filter((x) => x.threads === "64")
+  .filter((x) => ["openmp-inverted", "rayon", "openmp"].includes(x.name))
+  .toSorted(
+    (a, b) =>
+      Number.parseFloat(a.matrix_size) - Number.parseFloat(b.matrix_size)
+  )
+  .map(({ name, duration, matrix_size }) => ({ name, duration, matrix_size }));
 await Deno.writeTextFile(
   "assets/performance-high-threads.csv",
   stringify(performanceHighThreads, {

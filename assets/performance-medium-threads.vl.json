@@ -12,7 +12,7 @@
   },
   "encoding": {
     "x": {
-      "field": "n",
+      "field": "matrix_size",
       "type": "quantitative",
       "sort": null,
       "scale": {

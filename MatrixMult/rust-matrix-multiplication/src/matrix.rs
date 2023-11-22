@@ -35,7 +35,7 @@ impl Matrix {
     }
 
     /// Swap the rows and columns of the matrix.
-    pub fn invert(&self) -> Matrix {
+    pub fn transpose(&self) -> Matrix {
         let rows = self.cols;
         let cols = self.rows;
 
@@ -176,14 +176,14 @@ fn test_matrix_with_weird_numbers() {
 }
 
 #[test]
-fn invert_matrix_works() {
+fn transpose_matrix_works() {
     let matrix = Matrix {
         rows: 2,
         cols: 2,
         data: vec![1.0, 2.0, 3.0, 4.0],
     };
     assert_eq!(
-        matrix.invert(),
+        matrix.transpose(),
         Matrix {
             rows: 2,
             cols: 2,
@@ -193,14 +193,14 @@ fn invert_matrix_works() {
 }
 
 #[test]
-fn invert_matrix_works_b() {
+fn transpose_matrix_works_b() {
     let matrix = Matrix {
         rows: 3,
         cols: 2,
         data: vec![7.0, 8.0, 9.0, 10.0, 11.0, 12.0],
     };
     assert_eq!(
-        matrix.invert(),
+        matrix.transpose(),
         Matrix {
             rows: 2,
             cols: 3,

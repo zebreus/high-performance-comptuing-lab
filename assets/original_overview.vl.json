@@ -1,0 +1,53 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Implementation comparison",
+  "config": {
+    "font": "Spectral, sans-serif"
+  },
+  "autosize": "pad",
+  "height": 100,
+  "width": 100,
+  "data": {
+    "url": "./original_overview.csv"
+  },
+  "encoding": {
+    "x": {
+      "field": "matrix_size",
+      "type": "quantitative",
+      "scale": {
+        "type": "log",
+        "base": 2
+      },
+      "sort": null,
+      "title": "Matrix size (n x n)"
+    },
+    "y": {
+      "field": "duration",
+      "aggregate": "mean",
+      "type": "quantitative",
+      "title": "Mean duration (seconds)",
+      "sort": null,
+      "scale": {
+        "type": "log",
+        "base": 2,
+        "nice": true
+      }
+    },
+    "facet": {
+      "field": "threads",
+      "type": "nominal",
+      "sort": { "op": "median", "field": "matrix_size" },
+      "columns": 2,
+      "title": "Threads"
+    },
+    "color": {
+      "field": "name",
+      "type": "nominal",
+      "sort": null,
+      "title": "Implementation"
+    }
+  },
+  "mark": { "type": "line" }
+
+
+}

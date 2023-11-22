@@ -12,6 +12,7 @@ ifndef::env-vscode[]
 :kroki-fetch-diagram: true
 :kroki-default-options: inline
 endif::env-vscode[]
+:cpp: C++
 
 image::../assets/logo_hda.svg[role=logo]
 
@@ -56,41 +57,118 @@ By setting the schedule to `static` we ensure that the workload is evenly distri
 include::MatrixMult/matrix_openmp.cpp[tag=algorithm]
 ----
 
+We also implemented the algorithm in Rust as shown in <<rust_implementation>>. It is common in Rust to use fewer explicit `for` loops then in {cpp} and instead use iterators and filter/map/reduce functions to process data. This is also the case here. We use the `chunks_exact(columns)` function to create an iterator that iterates over the rows. For each row we do the same to get an iterator over all columns of the other matrix. Notice that we transposed the other matrix before, so all of its columns are continous memory regions. This allows us to also use `chunks_exact()` here.
 
-=== Compare the transposed rust and omp implementation
+To calculate the do product of the row and column, we create iterators for both and zip them together to get an iterator over the pairs of elements at the same position. We then map the pairs to their product and sum the results up to get the dot product.
 
-=== Compare the untransposed omp, unsafe rust, paired rust and collect rust implementations
+We mapped every row to an iterator so we now have an iterator over iterators. We use flatten to merge those iterators into one iterator of the results. We then collect the results into a vector, which is then converted into a matrix.
 
-=== Compare the rust implementations using mutexes with itself?
+.Sequential Rust implementation
+[source#rust_implementation.linenums,rust]
+----
+include::MatrixMult/rust-matrix-multiplication/src/matrix/multiply.rs[tag=multiply_sequential]
+----
 
-== Appendix
 
-[#our-computers,cols="1,2,2"]
-.Our computers
-|===
-|
-|Lennart
-|Björn 
+We can now parallelize this using the Rayon Data-parallelism library. Rayon provides parallelizing iterators as a drop in replacement for the normal Rust iterators. As you can see in <<rayon_implementation>> we only needed to replace the `chunks_exact()` function with `par_chunks_exact()`. This will create a parallel iterator instead of a sequential one that will split the work among the threads.
 
-|CPU
-|i9-11950H @ 2.6GHz
-|i5-7200U @ 2.5GHz
+In the inner part we still use `iter()` instead of Rayons `par_iter()` because we want to do not want to parallelize the inner part. This is because the inner part is very small and the overhead of parallelizing is probably bigger than the benefits.
 
-|CPU-Kerne / Threads
-|8 / 16
-|2 / 4
+.Rayon implementation
+[source#rayon_implementation.linenums,rust]
+----
+include::MatrixMult/rust-matrix-multiplication/src/matrix/multiply.rs[tag=multiply]
+----
 
-|GPU
-|RTX3070 mobile
-|Intel HD Graphics 620
+In the two examples above we did transpose the matrix beforehand, which can bring a significant performance boost over the {cpp} implementation. To be able to compare the performance of the two implementations we also benchmarked a {cpp} implementation that transposes the matrix before multiplying it. This can be seen in <<parallel_implementation_transposed>>. The algorithm is similar to <<parallel_implementation>> except that we transpose the second matrix before multiplying it.
 
-|OS
-|NixOS unstable/latest - 64 Bit
-|Ubuntu 23.04 - 64 Bit
+.Transposed openMP implementation
+[source#parallel_implementation_transposed.linenums,cpp]
+----
+include::MatrixMult/matrix_openmp_transposed.cpp[tag=algorithm]
+----
 
-|RAM (GB)
-|32
-|8
-|=== 
+We also implemented the algorithm in Rust without transposing the matrix first as shown in <<rust_implementation_without_transposing>>, so we can compare it to the original {cpp} implementations. We met two main problems when implementing it. First, openMP parallelizes loops, while Rayon parallelizes iterators. This makes all the comparable implementations a bit awkward, as we create iterators over number ranges to replicate the {cpp} loops. In all follwing examples we create iterators over `(row, column)` tuples to replicate the {cpp} behaviour. The second problem is that the Rust compiler guarantees that safe Rust does not contain any https://doc.rust-lang.org/nomicon/races.html[data races]. As a result it does not allow multiple threads to have mutable access to the same data. So we cannot share the result matrix among the threads, like we did in {cpp}.
+
+A workaround is to use unsafe Rust, which allows us to take a pointer to the result Matrix and share it among multiple threads. <<multiply_faithful_unsafe>> shows our implementation using unsafe Rust.
+
+.Unsafe Rust implementation
+[source#rayon_faithful_unsafe.linenums,rust]
+----
+include::MatrixMult/rust-matrix-multiplication/src/matrix/multiply.rs[tag=multiply_faithful_unsafe]
+----
+
+The more correct way would be to write our code in a way that guarantees that no thread can write into the memory of another thread. <<multiply_faithful_iterators>> shows our implementation using this approach. For this we do not only create an iterator over the `(row, column)` coordinate pairs, but we also add a mutable reference to the associated location in the result matrix to the tuples. This way we iterate over something like `(row, column, resulting_value)` instead. This way every thread can only mutate the one value in the result matrix it is supposed to write.
+
+.Rust implementation with pairs
+[source#rayon_faithful_pairs.linenums,rust]
+----
+include::MatrixMult/rust-matrix-multiplication/src/matrix/multiply.rs[tag=multiply_faithful_pairs]
+----
+
+In the previous examples we allocated the result matrix before creating the iterators to be as close to the {cpp} implementation as possible. It should result in the exect same behaviour, if we map the coordinate pairs to their resulting value and collect them into a matrix. <<rayon_faithful_iterators>> shows that approach.
+
+.Rust implementation without transposing
+[source#rayon_faithful_iterators.linenums,rust]
+----
+include::MatrixMult/rust-matrix-multiplication/src/matrix/multiply.rs[tag=multiply_faithful_iterators]
+----
+
+Finally we could also just protect the result matrix with a Mutex. This way we can share it among all threads, but only one thread can access it at a time. This can have a small performance overhead, as we assert memory safety at runtime. <<rayon_faithful_mutex>> shows this approach.
+
+.Rust implementation with a Mutex
+[source#rayon_faithful_mutex.linenums,rust]
+----
+include::MatrixMult/rust-matrix-multiplication/src/matrix/multiply.rs[tag=multiply_faithful_mutex]
+----
+
+=== Compare the transposed Rust and openMP implementation
+
+<<transposed-overview>> and <<original-overview>> show the performance of different implementations of the same algorithm.
+
+.Transposed Rust and openMP implementations
+:chart-id: id=transposed-overview
+:vega-lite-filename: processed-assets/transposed_overview.vl.json
+include::scripts/vega-chart.adoc[]
+
+
+.Original Rayon and openMP implementations
+:chart-id: id=original-overview
+:vega-lite-filename: processed-assets/original_overview.vl.json
+include::scripts/vega-chart.adoc[]
+
+Rayon and openMP deliver nearly identical performance in every case, with openMP being slightly faster for single-threaded small matrices and rayon being slightly faster everywhere else.
+We can see that Rayon allocates its threadpool at application startup and openMP creates it only right before the parallel section. There is probably a setting in openMP and Rayon to change this behaviour, but we already ran our benchmarks. <<transposed-high-threads>> and <<original-high-threads>> shows the performance for 64 threads again.
+
+.Detailed comparison of the transposing implementations
+:chart-id: id=transposed-high-threads
+:vega-lite-filename: processed-assets/transposed-high-threads.vl.json
+include::scripts/vega-chart.adoc[]
+
+.Detailed comparison of the normal implementations
+:chart-id: id=original-high-threads
+:vega-lite-filename: processed-assets/original-high-threads.vl.json
+include::scripts/vega-chart.adoc[]
+
+=== Comparing the transposing and non-transposing implementations
+
+<<algorithm-comparison>> shows the performance of the different algorithms. The transposing algorithms seem to be slower for small matrices but from a given size onward they are faster. Mutexes are slower, surprisingly they approach the performance of the other non-transposing implementation for large matrices. Probably because the time spend calculating the dot product becomes much larger than the time spend locking and unlocking the mutex.
+
+.Detailed comparison of the transposing vs normal vs mutex implementations
+:chart-id: id=algorithm-comparison-high-threads
+:vega-lite-filename: processed-assets/algorithm-comparison-high-threads.vl.json
+include::scripts/vega-chart.adoc[]
+
+=== Conclusion
+
+Transposing the matrix is an easy way to gain a bit of performance here. Performance of CPP and rayon is comparable.
+
+=== Future work
+
+We did not look at SIMD instructions, we could probably gain a bit of performance by using them.
+
+Our benchmarks included startup overhead for openMP, but did not for rayon.
+
+We did not have enough time to calculate efficiency and speedup.
 
 include::scripts/trailing-scripts.adoc[]

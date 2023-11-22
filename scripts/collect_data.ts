@@ -122,6 +122,146 @@ await Deno.writeTextFile(
   })
 );
 
+const mean = <T extends Record<string, string>>(
+  arr: Array<T>,
+  key: keyof T,
+  groupBy: (keyof T)[]
+): Array<T & Record<typeof key, number>> => {
+  const groups = arr.reduce((acc, value) => {
+    const entryKey = Object.entries(value)
+      .filter(([key]) => groupBy.includes(key))
+      .map(([_, value]) => value)
+      .join("-");
+    if (!acc[entryKey]) {
+      const withoutKey = { ...value };
+      acc[entryKey] = { ...withoutKey, [key]: [] };
+    }
+    acc[entryKey][key].push(value[key]);
+    return acc;
+  }, {} as Record<string, T & Record<typeof key, Array<T[typeof key]>>>);
+  const result = Object.values(groups).map(
+    (x): T & Record<typeof key, number> => ({
+      ...x,
+      [key]:
+        x[key].reduce((a, b) => a + Number.parseFloat(b), 0) / x[key].length,
+    })
+  );
+  return result;
+};
+
+const transposedOverview = mean(
+  resultsVirgoMatrix.filter((x) =>
+    ["openmp-transposed", "rayon"].includes(x.name)
+  ),
+  "duration",
+  ["name", "threads", "matrix_size"]
+)
+  .toSorted(
+    (a, b) =>
+      Number.parseFloat(a.matrix_size) - Number.parseFloat(b.matrix_size)
+  )
+  .toSorted(
+    (a, b) => Number.parseFloat(a.threads) - Number.parseFloat(b.threads)
+  )
+  .map(({ name, duration, matrix_size, threads }) => ({
+    name,
+    duration,
+    matrix_size,
+    threads,
+  }));
+await Deno.writeTextFile(
+  "assets/transposed_overview.csv",
+  stringify(transposedOverview, {
+    columns: ["name", "duration", "threads", "matrix_size"],
+  })
+);
+
+const originalOverview = mean(
+  resultsVirgoMatrix.filter((x) =>
+    [
+      "openmp",
+      "rayon-faithful-pairs",
+      "rayon-faithful-iterators",
+      "rayon-faithful-unsafe",
+    ].includes(x.name)
+  ),
+  "duration",
+  ["name", "threads", "matrix_size"]
+)
+  .toSorted(
+    (a, b) =>
+      Number.parseFloat(a.matrix_size) - Number.parseFloat(b.matrix_size)
+  )
+  .toSorted(
+    (a, b) => Number.parseFloat(a.threads) - Number.parseFloat(b.threads)
+  )
+  .map(({ name, duration, matrix_size, threads }) => ({
+    name,
+    duration,
+    matrix_size,
+    threads,
+  }));
+await Deno.writeTextFile(
+  "assets/original_overview.csv",
+  stringify(originalOverview, {
+    columns: ["name", "duration", "threads", "matrix_size"],
+  })
+);
+
+const transposedHighThreads = resultsVirgoMatrix
+  .filter((x) => ["openmp-transposed", "rayon"].includes(x.name))
+  .filter((x) => x.threads === "64")
+  .toSorted(
+    (a, b) =>
+      Number.parseFloat(a.matrix_size) - Number.parseFloat(b.matrix_size)
+  )
+  .map(({ name, duration, matrix_size }) => ({ name, duration, matrix_size }));
+await Deno.writeTextFile(
+  "assets/transposed-high-threads.csv",
+  stringify(transposedHighThreads, {
+    columns: ["name", "duration", "matrix_size"],
+  })
+);
+
+const originalHighThreads = resultsVirgoMatrix
+  .filter((x) =>
+    [
+      "openmp",
+      "rayon-faithful-pairs",
+      "rayon-faithful-iterators",
+      "rayon-faithful-unsafe",
+    ].includes(x.name)
+  )
+  .filter((x) => x.threads === "64")
+  .toSorted(
+    (a, b) =>
+      Number.parseFloat(a.matrix_size) - Number.parseFloat(b.matrix_size)
+  )
+  .map(({ name, duration, matrix_size }) => ({ name, duration, matrix_size }));
+await Deno.writeTextFile(
+  "assets/original-high-threads.csv",
+  stringify(originalHighThreads, {
+    columns: ["name", "duration", "matrix_size"],
+  })
+);
+
+const algorithmComparisonHighThreads = resultsVirgoMatrix
+  .filter((x) =>
+    ["rayon", "rayon-faithful-pairs", "rayon-faithful-mutex"].includes(x.name)
+  )
+  .filter((x) => x.threads === "64")
+  .toSorted(
+    (a, b) =>
+      Number.parseFloat(a.matrix_size) - Number.parseFloat(b.matrix_size)
+  )
+  .map(({ name, duration, matrix_size }) => ({ name, duration, matrix_size }));
+await Deno.writeTextFile(
+  "assets/algorithm-comparison-high-threads.csv",
+  stringify(algorithmComparisonHighThreads, {
+    columns: ["name", "duration", "matrix_size"],
+  })
+);
+
 const performanceLowThreads = resultsVirgoMatrix
   .filter((x) => x.threads === "1")
   .toSorted(
@@ -152,7 +292,6 @@ await Deno.writeTextFile(
 
 const performanceHighThreads = resultsVirgoMatrix
   .filter((x) => x.threads === "64")
-  .filter((x) => ["openmp-transposed", "rayon", "openmp"].includes(x.name))
   .toSorted(
     (a, b) =>
       Number.parseFloat(a.matrix_size) - Number.parseFloat(b.matrix_size)

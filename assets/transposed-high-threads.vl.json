@@ -1,0 +1,57 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Implementation comparison for 64 threads",
+  "config": {
+    "font": "Spectral, sans-serif"
+  },
+  "autosize": "fit",
+  "width": 500,
+  "height": 300,
+  "data": {
+    "url": "./transposed-high-threads.csv"
+  },
+  "encoding": {
+    "x": {
+      "field": "matrix_size",
+      "type": "quantitative",
+      "sort": null,
+      "scale": {
+        "type": "log",
+        "base": 2,
+        "nice": true
+      },
+
+      "title": "Matrix Size (N*N)"
+    },
+    "y": {
+      "field": "duration",
+      "aggregate": "mean",
+      "type": "quantitative",
+      "title": "Mean duration (seconds)",
+      "scale": {
+        "type": "log",
+        "base": 2,
+        "nice": true
+      }
+    },
+    "color": {
+      "field": "name",
+      "title": "Implementation",
+      "type": "nominal"
+    }
+  },
+  "layer": [
+    {
+      "mark": { "type": "point", "opacity": 0.5 }
+    },
+    {
+      "mark": { "type": "line", "tooltip": true, "point": "transparent" },
+      "encoding": {
+        "y": {
+          "field": "duration",
+          "aggregate": "mean"
+        }
+      }
+    }
+  ]
+}

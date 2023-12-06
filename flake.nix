@@ -23,6 +23,9 @@
         name = "high-performance-computing";
         packages.default =
           llvmPackages_16.stdenv.mkDerivation {
+
+            CLANG_RESOURCE_DIR = "${llvmPackages_16.libclang.lib}/lib/clang/16";
+            LIBCLANG_PATH = "${llvmPackages_16.libclang.lib}/lib";
             name = name;
             src = ./.;
 

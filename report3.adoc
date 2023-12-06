@@ -1,0 +1,149 @@
+:doctype: book
+:imagesdir: images
+:stylesheet: paper.css
+:last-update-label!:
+:source-highlighter: highlight.js
+:highlightjs-theme: thesis
+:highlightjsdir: libraries/highlightjs
+:stem:
+:toc: macro
+:xrefstyle: short
+ifndef::env-vscode[]
+:kroki-fetch-diagram: true
+:kroki-default-options: inline
+endif::env-vscode[]
+:cpp: C++
+
+image::../assets/logo_hda.svg[role=logo]
+
+[.university.text-center]
+Darmstadt University of Applied Sciences
+
+[.faculty.text-center]
+Faculty of Computer Science
+
+[discrete#main-title]
+= Preliminary lab report for the third high-performance computing exercise
+
+[.presented-by.text-center]
+by +
+****REMOVED**** ***REMOVED*** +
+****REMOVED**** ***REMOVED***
+
+:part-signifier: Part
+:listing-caption: Listing
+
+== Intro 
+
+In the third lab we will try to run a distributed sorting algorithm using openMPI. We are using Rust and MPI to implement the third lab.
+
+=== Non-distributed implementation
+
+We wrote a non-distributed implementation and compared it to the reference CPP implementation. We tried various sorting algorithms and found that radix sort is the fastest, but the standard librarys `sort_unstable()` is not far behind.
+
+<<single_threaded_implementation>> shows the sequential implementation of the matrix multiplication. The algorithm is pretty straight forward. We iterate over the rows of the first matrix and the columns of the second matrix. For each element we calculate the dot product of the row and column. The result is stored in the `result` matrix.
+
+=== Distributed approach
+
+Our distributed implementation is based on dividing the data into buckets and streaming the buckets to the other processes. We use a clear manager/worker approach. The manager is responsible for dividing the data into buckets and sending them to the workers. The workers receive the buckets and sort them. The manager then receives the sorted buckets and merges them into a sorted list.
+
+<<server-flow>> and <<client-flow>> show the flow of the manager and the workers.
+
+// .Reading and distributing the data
+// [nomnoml]
+// ....
+// [<start> start]->
+// [Read block of unsorted data]->[Split into 256 buckets;based on the first byte]->
+// [Send each bucket to responsible worker; _;
+// worker = firstByte % numberOfWorkers]->
+// [<choice> Unsorted data left?]yes->[Read 1mb of unsorted data]
+// [<choice> Unsorted data left?]no ->[Send done to each worker]->
+// [<end> server]--[<note> All data has been distributed to all workers]
+
+// [<start> start client]->
+// [Create 256 empty lists]->
+// [Receive message]->[<choice> Is done message?]no ->
+// [Sort received data]->[Merge into the list with the same prefix]->[Receive message]
+
+// [<choice> Is done message?]yes ->
+// [Discard empty lists]->
+// [<end> client]--[<note> We now have a sorted list for;
+// all buckets this worker is responsible for]
+// ....
+
+// .Receiving the data
+// [nomnoml]
+// ....
+// [<start> start client]->
+// [Discard empty buckets]->[Send next bucket to server]->[<choice> Buckets left?]yes ->[Send next bucket to server]
+// [<choice> Buckets left?]no ->
+// [Send done message]
+
+// [<start> start server]->
+// [Create 256 empty lists]->
+// [Create list with workers that are not finished]->
+// [Receive message from any worker]->[<choice> Is done message?]no ->
+// [Append data to the correct list] ->[Receive message from any worker]
+
+
+// [<choice> Is done message?] yes ->[Mark worker as finished] ->
+// [<choice> Are all workers finished?]no -> [Receive message from any worker]
+// [<choice> Are all workers finished?]yes ->[Concatenate the 256 sorted lists into one sorted list]-> [Write the sorted list into a file]
+// ....
+
+
+.Server flow
+[nomnoml#server-flow,opts=inline,width=22cm]
+....
+#.box: fill=#8f8 dashed
+
+
+[<start> start]->
+[Read block of unsorted data]->[Split into 256 buckets;based on the first byte]->
+[Send each bucket to responsible worker; _;
+worker = firstByte % numberOfWorkers]->
+[<choice> Unsorted data left?]yes->[Read block of unsorted data]
+[<choice> Unsorted data left?]no ->[Send done to each worker]->
+[<box> Finished reading]->
+[Create 256 empty lists]->
+[Receive message from any worker]->[<choice> Is done message?]yes ->[<choice> Are all workers done]
+[<choice> Is done message?]no ->
+[Insert data into the correct list based on its prefix] ->[Receive message from any worker]
+
+
+[<choice> Are all workers done]no -> [Receive message from any worker]
+[<choice> Are all workers done]yes ->[Concatenate the 256 sorted lists and write them in a file]->
+[<end> end]
+....
+
+.Client flow
+[nomnoml#client-flow]
+....
+#.box: fill=#8f8 dashed
+
+[<start> start client]->
+[Create 256 empty lists]->
+[Receive message]->[<choice> Is done message?]no ->
+[Sort received data]->[Merge into the list with the same prefix]->[Receive message]
+
+[<choice> Is done message?]yes ->
+[<box> Finished reading]->
+[Discard empty buckets]->[Send next bucket to server]->[<choice> Buckets left?]yes ->[Send next bucket to server]
+[<choice> Buckets left?]no ->
+[Send done message]->
+[<end> client]
+....
+
+=== Performance
+
+We did not have time to measure performance at the Virgo cluster. We did measure the performance on our local machines. We used a 10GB file with generated with gensort. The single node implemetation is the non-mpi implementation. The measurements for more than one node are the MPI implementation.
+<<sorting-data>> show that our MPI implementation is always slower than the single threaded implementation. This is probably due to the overhead of sending the data over the network. We could probably optimize our implementation to be better, but we did not have time to do so.
+
+.Our MPI implementation
+:chart-id: id=sorting-data
+:vega-lite-filename: processed-assets/sorting-data.vl.json
+include::scripts/vega-chart.adoc[]
+
+
+
+include::scripts/trailing-scripts.adoc[]

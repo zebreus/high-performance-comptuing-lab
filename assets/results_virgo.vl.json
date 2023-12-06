@@ -1,0 +1,61 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Implementation comparison",
+  "config": {
+    "font": "Spectral, sans-serif"
+  },
+  "autosize": "fit",
+  "width": 500,
+  "height": 300,
+  "data": {
+    "url": "./results_virgo.csv"
+  },
+  "transform": [
+    { "filter": {
+        "field": "name",
+        "equal": "rayon"
+      }
+    }
+  ],
+  "encoding": {
+    "x": {
+      "field": "matrix_size",
+      "type": "quantitative",
+      "scale": {
+        "type": "log",
+        "base": 2
+      },
+      "title": "Matrix size (n x n)"
+    },
+    "y": {
+      "field": "duration",
+      "aggregate": "mean",
+      "type": "quantitative",
+      "title": "Mean duration (seconds)",
+      "scale": {
+        "type": "log",
+        "base": 2,
+        "nice": true
+      }
+    },
+    "color": {
+      "field": "threads",
+      "type": "nominal",
+      "sort": null
+    }
+  },
+  "layer": [
+    {
+      "mark": { "type": "point", "opacity": 0.5 }
+    },
+    {
+      "mark": { "type": "line", "tooltip": true, "point": "transparent" },
+      "encoding": {
+        "y": {
+          "field": "duration",
+          "aggregate": "mean"
+        }
+      }
+    }
+  ]
+}

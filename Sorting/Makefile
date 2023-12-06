@@ -11,7 +11,7 @@
 CC = clang++ 
 # CC = c++
 
-CFLAGS=-Wall -O3
+# CFLAGS=-Wall -O3
 
 # For recursive make in the UTILS subdirectory, see:
 # https://www.gnu.org/software/make/manual/make.html#Recursion
@@ -41,6 +41,24 @@ valsort: $(UTILS)/valsort utils
 dumbSort: dumbSort.cpp gray_sort_record.h
 	$(CC) -std=c++11 $(CFLAGS) -o dumbSort dumbSort.cpp
 
+test: dumbSort gensort valsort
+	./gensort -a 10000000 testfile
+	./dumbSort testfile testfile.sorted
+	./valsort testfile.sorted
+
+run-rust: 
+	unset CC && cd rust-sorting && cargo run --release  -- --algorithm glidesort /mnt/toast/10gb.dat /mnt/toast/
+
+run-cpp: dumbSort
+	./dumbSort ./1gb.dat ./1gb.dat.sorted
 
 
+run-mpi: 
+	unset CC && cd rust-sorting && cargo build --release
+	mpiexec -n 3 ../target/release/rust-sorting --algorithm mpi-block-sort 1gb.dat ./
+	./valsort output.sorted
 
+run-radix: 
+	unset CC && cd rust-sorting && cargo build --release
+	mpiexec --oversubscribe -n 16 ../target/release/rust-sorting --algorithm mpi-distributed-radix-sort /mnt/toast/10gb.dat /mnt/toast/
+	./valsort /mnt/toast/output.sorted

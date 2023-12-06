@@ -18,40 +18,40 @@
 #include <istream>
 #include <ostream>
 
-class graySortRecord {
+class GraySortRecord {
   public:
     static const int record_size = 100;
     static const int key_size = 10;
 
-  private:
+  public:
     char data[record_size];
 
   public:
     // Constructors
-    graySortRecord() = default;  // simply copy the only member, data
+    GraySortRecord() = default;  // simply copy the only member, data
 
-    graySortRecord(const graySortRecord& other) = default;  // simple.
+    GraySortRecord(const GraySortRecord& other) = default;  // simple.
 
     // Destructor
-    ~graySortRecord() = default;
+    ~GraySortRecord() = default;
 
     // read only, "safe" getter for the data field
     // unsigned char *data( ) const { return data; }
 
     // overloaded "less than" operator
-    bool operator<(const graySortRecord& rhs) const  // rhs = right hand side
+    bool operator<(const GraySortRecord& rhs) const  // rhs = right hand side
     {
         return (memcmp(data, rhs.data, key_size) < 0);
     }
 
     // overloaded input
-    friend std::istream& operator>>(std::istream& in, graySortRecord& rec) {
-        return in.read(rec.data, graySortRecord::record_size);
+    friend std::istream& operator>>(std::istream& in, GraySortRecord& rec) {
+        return in.read(rec.data, GraySortRecord::record_size);
     }
 
     // overloaded output
     friend std::ostream&
-    operator<<(std::ostream& out, const graySortRecord& rec) {
-        return out.write(rec.data, graySortRecord::record_size);
+    operator<<(std::ostream& out, const GraySortRecord& rec) {
+        return out.write(rec.data, GraySortRecord::record_size);
     }
 };

@@ -51,13 +51,11 @@ async fn main() {
     eprintln!("setup time = {} seconds", setup_duration.as_secs_f64());
     let before_sort = Instant::now();
 
-    let output_files = algorithm
-        .sort(cli.input.as_path(), cli.output_directory.as_path())
-        .await;
+    let output_files = algorithm.sort(cli.input.as_path(), cli.output_directory.as_path());
 
+    eprintln!("in main");
     let sort_duration = before_sort.elapsed();
 
     println!("{}", sort_duration.as_secs_f64());
-    eprintln!("sort time = {} seconds", sort_duration.as_secs_f64());
     eprintln!("Output files: {:?}", output_files);
 }

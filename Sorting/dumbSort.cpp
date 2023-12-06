@@ -66,30 +66,39 @@ int main(int argc, char** argv) {
     };  // else...
 
     // read all of the records into a vector
-    std::vector<graySortRecord> records;
+    std::vector<GraySortRecord> records;
     records.reserve(1024);  // to save copying, start with 1 KByte data
-    graySortRecord rec;
-    long int numRecords = 0;
+    GraySortRecord rec;
     while (inStream >> rec) {
         records.push_back(rec);
-        ++numRecords;
     };
-    std::cout << "Read " << numRecords << " from input file!\n";
-    printTime(startTime);
+    std::cout << "Finished reading in " << std::setprecision(8)
+              << secondsSince(startTime) << " seconds.\n";
+
+    // start stop watch...
+    auto sortTime = std::chrono::system_clock::now();
 
     // SORT THE RECORDS!!!
     std::sort(records.begin(), records.end());
 
-    std::cout << "Finished Sorting!\n";
-    printTime(startTime);
+    std::cout << "Finished sorting in " << std::setprecision(8)
+              << secondsSince(sortTime) << " seconds.\n";
+
+    auto writeTime = std::chrono::system_clock::now();
 
     // write all of the records to output file
-    for (graySortRecord r : records)
+    for (GraySortRecord r : records)
         outStream << r;
+    outStream.flush();
+    outStream.close();
+
+    std::cout << "Finished writing in " << std::setprecision(8)
+              << secondsSince(writeTime) << " seconds.\n";
 
     // Stop stopwatch!
-    std::cout << "Dumb Sort Program finished!" << std::endl;
-    printTime(startTime);
+    std::cout << "Total time: " << std::setprecision(8)
+              << secondsSince(startTime) << " seconds.\n";
+    std::cout << std::endl;
 
     return (0);  // OK!!!
 }

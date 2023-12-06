@@ -262,6 +262,22 @@ await Deno.writeTextFile(
   })
 );
 
+const thingg = resultsVirgoMatrix
+  .filter((x) =>
+    ["rayon", "rayon-faithful-pairs", "rayon-faithful-mutex"].includes(x.name)
+  )
+  .filter((x) => x.threads === "64")
+  .toSorted(
+    (a, b) => Number.parseFloat(a.threads) - Number.parseFloat(b.threads)
+  )
+  .map(({ name, duration, threads }) => ({ name, duration, threads }));
+await Deno.writeTextFile(
+  "assets/thingg.csv",
+  stringify(thingg, {
+    columns: ["name", "duration", "threads"],
+  })
+);
+
 const performanceLowThreads = resultsVirgoMatrix
   .filter((x) => x.threads === "1")
   .toSorted(

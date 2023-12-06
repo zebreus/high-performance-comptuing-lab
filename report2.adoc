@@ -88,9 +88,9 @@ In the two examples above we did transpose the matrix beforehand, which can brin
 include::MatrixMult/matrix_openmp_transposed.cpp[tag=algorithm]
 ----
 
-We also implemented the algorithm in Rust without transposing the matrix first as shown in <<rust_implementation_without_transposing>>, so we can compare it to the original {cpp} implementations. We met two main problems when implementing it. First, openMP parallelizes loops, while Rayon parallelizes iterators. This makes all the comparable implementations a bit awkward, as we create iterators over number ranges to replicate the {cpp} loops. In all follwing examples we create iterators over `(row, column)` tuples to replicate the {cpp} behaviour. The second problem is that the Rust compiler guarantees that safe Rust does not contain any https://doc.rust-lang.org/nomicon/races.html[data races]. As a result it does not allow multiple threads to have mutable access to the same data. So we cannot share the result matrix among the threads, like we did in {cpp}.
+We also implemented the algorithm in Rust without transposing the matrix first, so we can compare it to the original {cpp} implementations. We met two main problems when implementing it. First, openMP parallelizes loops, while Rayon parallelizes iterators. This makes all the comparable implementations a bit awkward, as we create iterators over number ranges to replicate the {cpp} loops. In all follwing examples we create iterators over `(row, column)` tuples to replicate the {cpp} behaviour. The second problem is that the Rust compiler guarantees that safe Rust does not contain any https://doc.rust-lang.org/nomicon/races.html[data races]. As a result it does not allow multiple threads to have mutable access to the same data. So we cannot share the result matrix among the threads, like we did in {cpp}.
 
-A workaround is to use unsafe Rust, which allows us to take a pointer to the result Matrix and share it among multiple threads. <<multiply_faithful_unsafe>> shows our implementation using unsafe Rust.
+A workaround is to use unsafe Rust, which allows us to take a pointer to the result Matrix and share it among multiple threads. <<rayon_faithful_unsafe>> shows our implementation using unsafe Rust.
 
 .Unsafe Rust implementation
 [source#rayon_faithful_unsafe.linenums,rust]
@@ -98,7 +98,7 @@ A workaround is to use unsafe Rust, which allows us to take a pointer to the res
 include::MatrixMult/rust-matrix-multiplication/src/matrix/multiply.rs[tag=multiply_faithful_unsafe]
 ----
 
-The more correct way would be to write our code in a way that guarantees that no thread can write into the memory of another thread. <<multiply_faithful_iterators>> shows our implementation using this approach. For this we do not only create an iterator over the `(row, column)` coordinate pairs, but we also add a mutable reference to the associated location in the result matrix to the tuples. This way we iterate over something like `(row, column, resulting_value)` instead. This way every thread can only mutate the one value in the result matrix it is supposed to write.
+The more correct way would be to write our code in a way that guarantees that no thread can write into the memory of another thread. <<rayon_faithful_pairs>> shows our implementation using this approach. For this we do not only create an iterator over the `(row, column)` coordinate pairs, but we also add a mutable reference to the associated location in the result matrix to the tuples. This way we iterate over something like `(row, column, resulting_value)` instead. This way every thread can only mutate the one value in the result matrix it is supposed to write.
 
 .Rust implementation with pairs
 [source#rayon_faithful_pairs.linenums,rust]
@@ -152,7 +152,7 @@ include::scripts/vega-chart.adoc[]
 
 === Comparing the transposing and non-transposing implementations
 
-<<algorithm-comparison>> shows the performance of the different algorithms. The transposing algorithms seem to be slower for small matrices but from a given size onward they are faster. Mutexes are slower, surprisingly they approach the performance of the other non-transposing implementation for large matrices. Probably because the time spend calculating the dot product becomes much larger than the time spend locking and unlocking the mutex.
+<<algorithm-comparison-high-threads>> shows the performance of the different algorithms. The transposing algorithms seem to be slower for small matrices but from a given size onward they are faster. Mutexes are slower, surprisingly they approach the performance of the other non-transposing implementation for large matrices. Probably because the time spend calculating the dot product becomes much larger than the time spend locking and unlocking the mutex.
 
 .Detailed comparison of the transposing vs normal vs mutex implementations
 :chart-id: id=algorithm-comparison-high-threads

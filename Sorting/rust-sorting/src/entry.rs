@@ -1,3 +1,5 @@
+use std::{cmp::Ordering, collections::BinaryHeap};
+
 use arr_macro::arr;
 use itertools::Itertools;
 use rdst::{RadixKey, RadixSort};
@@ -25,6 +27,10 @@ impl Entry {
 
     pub fn key(&self) -> &[u8; 10] {
         &self.key
+    }
+
+    pub fn bucket(&self) -> usize {
+        self.key[0] as usize
     }
 
     pub fn data(&self) -> &[u8; 90] {
@@ -175,7 +181,7 @@ pub struct RadixDivider<const BLOCK_SIZE: usize> {
 impl<const BLOCK_SIZE: usize> RadixDivider<BLOCK_SIZE> {
     pub fn new() -> Self {
         RadixDivider {
-            buffers: arr![{let mut vec = Vec::new(); vec.reserve(BLOCK_SIZE); vec}; 256],
+            buffers: arr![{let mut vec = Vec::new(); vec.reserve(BLOCK_SIZE*2); vec}; 256],
         }
     }
 
@@ -186,67 +192,159 @@ impl<const BLOCK_SIZE: usize> RadixDivider<BLOCK_SIZE> {
 
     pub fn push_all(&mut self, entries: &[Entry]) {
         for entry in entries {
-            let first_byte = entry.key()[0];
-            self.buffers[first_byte as usize].push(entry.clone());
+            self.buffers[entry.bucket()].push(*entry);
         }
     }
 
-    pub fn delegate_buffers(&mut self, delegator: &mut dyn FnMut(u8, Vec<Entry>)) {
+    pub fn delegate_buffers<'a>(&'a mut self, delegator: &mut dyn FnMut(u8, &'a Vec<Entry>)) {
         for (index, buffer) in self.buffers.iter_mut().enumerate() {
             if buffer.len() >= BLOCK_SIZE {
-                delegator(index as u8, std::mem::take(buffer));
+                delegator(index as u8, buffer);
             }
         }
     }
 
-    pub fn delegate_remaining_buffers(&mut self, delegator: &mut dyn FnMut(u8, Vec<Entry>)) {
+    /// Extracts all buckets that are filled with more than `BLOCK_SIZE` entries
+    pub fn get_delegateable_buffers(&mut self) -> Vec<(usize, Vec<u8>)> {
+        let mut result = Vec::new();
         for (index, buffer) in self.buffers.iter_mut().enumerate() {
-            if buffer.len() > 0 {
-                delegator(index as u8, std::mem::take(buffer));
+            if buffer.len() >= BLOCK_SIZE {
+                result.push((index, entries_to_u8_unsafe(std::mem::take(buffer))));
             }
         }
+        result
+    }
+
+    /// Extracts all buckets when all buckets are filled with more than `BLOCK_SIZE` entries
+    ///
+    /// Returns an empty vector if not all buckets are filled with more than `BLOCK_SIZE` entries
+    pub fn are_all_buffers_ready(&mut self) -> bool {
+        !self.buffers.iter().any(|buffer| buffer.len() < BLOCK_SIZE)
+    }
+
+    pub fn get_remaining_buffers(mut self) -> Vec<(usize, Vec<u8>)> {
+        let mut result = Vec::new();
+        for (index, buffer) in self.buffers.iter_mut().enumerate() {
+            if buffer.len() > 0 {
+                result.push((index, entries_to_u8_unsafe(std::mem::take(buffer))));
+            }
+        }
+        result
     }
 }
 
 pub struct SortedEntries {
     entries: Vec<Entry>,
+    others: Vec<Vec<Entry>>,
 }
 
 impl Into<SortedEntries> for Vec<Entry> {
     fn into(mut self) -> SortedEntries {
-        self.radix_sort_builder()
-            .with_single_threaded_tuner()
-            .with_parallel(false)
-            .sort();
-        SortedEntries { entries: self }
+        self.sort_unstable();
+        SortedEntries {
+            entries: self,
+            others: Vec::new(),
+        }
     }
 }
 
+fn merge_sorted_vecs(vecs: Vec<Vec<Entry>>) -> Vec<Entry> {
+    let new_length: usize = vecs.iter().map(|vec| vec.len()).sum();
+    let mut min_heap: BinaryHeap<MinElement> = vecs
+        .into_iter()
+        .filter(|v| !v.is_empty())
+        .map(|v| MinElement { vec: v, index: 0 })
+        .collect();
+
+    let mut result = Vec::with_capacity(new_length);
+
+    while let Some(mut min_element) = min_heap.pop() {
+        result.push(min_element.vec[min_element.index].clone());
+
+        min_element.index += 1;
+        if min_element.index < min_element.vec.len() {
+            // eprintln!("Pushing {:?}", min_element.index);
+            min_heap.push(min_element);
+        }
+    }
+
+    result
+}
+
+// Wrapper struct to store the minimum element along with its source vector and index
+#[derive(Debug, Eq, PartialEq)]
+struct MinElement {
+    vec: Vec<Entry>,
+    index: usize,
+}
+
+// Implement Ord and PartialOrd manually to make MinElement usable in BinaryHeap
+impl Ord for MinElement {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Reverse ordering to create a min heap
+        other.vec[other.index].cmp(&self.vec[self.index])
+        // self.vec[self.index].cmp(&other.vec[other.index])
+    }
+}
+
+impl PartialOrd for MinElement {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+// Merge once other gets this much bigger than main
+const GROWTH_FACTOR: usize = 1;
+
 impl SortedEntries {
     pub fn trust_me_bro_this_is_already_sorted(entries: Vec<Entry>) -> Self {
-        SortedEntries { entries }
+        SortedEntries {
+            entries,
+            others: Vec::new(),
+        }
     }
 
     pub fn new() -> Self {
         SortedEntries {
             entries: Vec::new(),
+            others: Vec::new(),
         }
     }
 
-    pub fn join(&mut self, other: Self) {
+    pub fn join(&mut self, mut other: Vec<Entry>) {
+        other.sort_unstable();
+        self.others.push(other);
+
         // let entries = self.entries;
         // TODO: Make this more efficient, as it copies every time, maybe use a list
-        let merged_vec = self
-            .entries
-            .iter()
-            .cloned()
-            .merge(other.entries.into_iter())
-            .collect::<Vec<_>>();
+        let main_length = self.entries.len();
+        let other_length: usize = self.others.iter().map(|vec| vec.len()).sum();
 
-        self.entries = merged_vec;
+        if (GROWTH_FACTOR * other_length) > main_length {
+            self.actually_join();
+        }
     }
 
-    pub fn into_vec(self) -> Vec<Entry> {
+    pub fn actually_join(&mut self) {
+        let other_length: usize = self.others.iter().map(|vec| vec.len()).sum();
+        if other_length == 0 {
+            return;
+        }
+
+        let mut all = std::mem::take(&mut self.others);
+        all.push(std::mem::take(&mut self.entries));
+        self.entries = merge_sorted_vecs(all);
+    }
+
+    pub fn into_vec(mut self) -> Vec<Entry> {
+        self.actually_join();
+        // eprintln!(
+        //     "{:?}",
+        //     &self.entries[0..10]
+        //         .iter()
+        //         .map(|entry| entry.key())
+        //         .collect::<Vec<_>>()
+        // );
         self.entries
     }
 

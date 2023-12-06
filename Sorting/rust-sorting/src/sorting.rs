@@ -16,13 +16,13 @@ pub enum SortImplementation {
 }
 
 impl SortImplementation {
-    pub fn sort(&self, input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
+    pub async fn sort(&self, input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
         match self {
             SortImplementation::Glidesort => glidesort::sort(input_file, output_directory),
             SortImplementation::BuiltinSort => builtin_sort::sort(input_file, output_directory),
             SortImplementation::MpiBlockSort => mpi_block_sort::sort(input_file, output_directory),
             SortImplementation::MpiDistributedRadixSort => {
-                mpi_distributed_radix_sort::sort(input_file, output_directory)
+                mpi_distributed_radix_sort::sort(input_file, output_directory).await
             }
         }
     }

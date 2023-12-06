@@ -1,4 +1,5 @@
 #![feature(array_chunks)]
+#![feature(noop_waker)]
 pub mod entry;
 mod sorting;
 
@@ -51,7 +52,9 @@ async fn main() {
     eprintln!("setup time = {} seconds", setup_duration.as_secs_f64());
     let before_sort = Instant::now();
 
-    let output_files = algorithm.sort(cli.input.as_path(), cli.output_directory.as_path());
+    let output_files = algorithm
+        .sort(cli.input.as_path(), cli.output_directory.as_path())
+        .await;
 
     eprintln!("in main");
     let sort_duration = before_sort.elapsed();

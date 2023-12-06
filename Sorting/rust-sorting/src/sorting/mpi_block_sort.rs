@@ -165,8 +165,8 @@ pub fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
                     break;
                 }
                 let input = u8_to_entries_unsafe(data);
-                let sorted_input: SortedEntries = input.into();
-                buffer.join(sorted_input);
+                // let sorted_input: SortedEntries = input.into();
+                buffer.join(input);
             }
         });
 

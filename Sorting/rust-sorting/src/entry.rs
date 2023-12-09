@@ -174,62 +174,60 @@ pub fn radix_divide<'a, Iter: Iterator<Item = &'a Entry>>(
     }
 }
 
-pub struct RadixDivider<const BLOCK_SIZE: usize> {
-    buffers: [Vec<Entry>; 256],
+pub struct RadixDivider<const BLOCK_SIZE: usize>
+where
+    [Entry; 256 * 2 * BLOCK_SIZE]:,
+{
+    buffers: Box<[Entry; 256 * 2 * BLOCK_SIZE]>,
+    positions: [usize; 256],
+    // buffer_slices: [&'static mut [Entry; 2 * BLOCK_SIZE]; 256],
 }
 
-impl<const BLOCK_SIZE: usize> RadixDivider<BLOCK_SIZE> {
+impl<const BLOCK_SIZE: usize> RadixDivider<BLOCK_SIZE>
+where
+    [Entry; 256 * 2 * BLOCK_SIZE]:,
+{
     pub fn new() -> Self {
+        let mut positions = [0; 256];
+        for i in 0..256 {
+            positions[i] = i * BLOCK_SIZE * 2;
+        }
+
         RadixDivider {
-            buffers: arr![{let mut vec = Vec::new(); vec.reserve(BLOCK_SIZE*2); vec}; 256],
+            buffers: Box::new([Entry::default(); 256 * 2 * BLOCK_SIZE]),
+            positions,
         }
     }
 
-    pub fn push(&mut self, entry: &Entry) {
-        let first_byte = entry.key()[0];
-        self.buffers[first_byte as usize].push(entry.clone());
+    #[inline]
+    fn push(&mut self, entry: &Entry) {
+        let key = entry.key()[0];
+        let index = self.positions[key as usize];
+        self.buffers[index] = entry.clone();
+        self.positions[key as usize] += 1;
     }
 
     pub fn push_all(&mut self, entries: &[Entry]) {
         for entry in entries {
-            self.buffers[entry.bucket()].push(*entry);
+            self.push(entry);
         }
     }
 
-    pub fn delegate_buffers<'a>(&'a mut self, delegator: &mut dyn FnMut(u8, &'a Vec<Entry>)) {
-        for (index, buffer) in self.buffers.iter_mut().enumerate() {
-            if buffer.len() >= BLOCK_SIZE {
-                delegator(index as u8, buffer);
-            }
-        }
-    }
-
-    /// Extracts all buckets that are filled with more than `BLOCK_SIZE` entries
+    /// Extracts all buckets
     pub fn get_delegateable_buffers(&mut self) -> Vec<(usize, Vec<u8>)> {
         let mut result = Vec::new();
-        for (index, buffer) in self.buffers.iter_mut().enumerate() {
-            if buffer.len() >= BLOCK_SIZE {
-                result.push((index, entries_to_u8_unsafe(std::mem::take(buffer))));
-            }
+        for (index, block_end) in self.positions.iter_mut().enumerate() {
+            let block_start = index * BLOCK_SIZE * 2;
+            let sl = entries_to_u8_unsafe(self.buffers[(block_start)..(*block_end)].to_vec());
+            *block_end = block_start;
+            result.push((index, sl));
         }
         result
     }
 
-    /// Extracts all buckets when all buckets are filled with more than `BLOCK_SIZE` entries
-    ///
-    /// Returns an empty vector if not all buckets are filled with more than `BLOCK_SIZE` entries
+    /// Check if all buckets are filled with more than BLOCK_SIZE elements
     pub fn are_all_buffers_ready(&mut self) -> bool {
-        !self.buffers.iter().any(|buffer| buffer.len() < BLOCK_SIZE)
-    }
-
-    pub fn get_remaining_buffers(mut self) -> Vec<(usize, Vec<u8>)> {
-        let mut result = Vec::new();
-        for (index, buffer) in self.buffers.iter_mut().enumerate() {
-            if buffer.len() > 0 {
-                result.push((index, entries_to_u8_unsafe(std::mem::take(buffer))));
-            }
-        }
-        result
+        !self.positions.iter().any(|position| position < &BLOCK_SIZE)
     }
 }
 

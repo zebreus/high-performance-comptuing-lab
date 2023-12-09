@@ -64,12 +64,6 @@ pub fn get_worker(bucket_id: i32, workers: i32) -> Rank {
 pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
     let universe = mpi::initialize().unwrap();
     let world = SimpleCommunicator::world();
-    spawn(async move {
-        let mut file = File::create("test.txt").unwrap();
-        file.write_all(b"Hello, world!").unwrap();
-        let world = SimpleCommunicator::world();
-        world.any_process();
-    });
     let size = world.size();
     let rank = world.rank();
     let start_time = Instant::now();
@@ -207,7 +201,7 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
                 send_task.await.unwrap();
             }
             let before_send = Instant::now();
-            let full_buffers = radix_divider.get_remaining_buffers();
+            let full_buffers = radix_divider.get_delegateable_buffers();
             mpi::request::scope(|scope| {
                 let mut guards = Vec::new();
                 for buffer in &full_buffers {

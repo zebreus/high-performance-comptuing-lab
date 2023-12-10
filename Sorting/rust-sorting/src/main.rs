@@ -7,6 +7,7 @@ mod sorting;
 use std::{path::PathBuf, time::Instant};
 
 use clap::Parser;
+use mpi::traits::*;
 use sorting::SortImplementation;
 
 #[derive(Parser)]
@@ -31,8 +32,6 @@ struct Cli {
 async fn main() {
     let cli = Cli::parse();
 
-    let before_setup = Instant::now();
-
     // Put the correct number of threads into rayons global thread pool
     rayon::ThreadPoolBuilder::new()
         .num_threads(cli.threads.unwrap_or(1))
@@ -49,17 +48,27 @@ async fn main() {
         std::process::exit(1);
     }
 
-    let setup_duration = before_setup.elapsed();
-    eprintln!("setup time = {} seconds", setup_duration.as_secs_f64());
+    let mpi_version = mpi::environment::library_version();
+    let mpi_universe = if mpi_version.is_ok() {
+        mpi::initialize()
+    } else {
+        None
+    };
+
+    // let setup_duration = before_setup.elapsed();
+    // eprintln!("setup time = {} seconds", setup_duration.as_secs_f64());
     let before_sort = Instant::now();
 
-    let output_files = algorithm
+    algorithm
         .sort(cli.input.as_path(), cli.output_directory.as_path())
         .await;
 
-    eprintln!("in main");
     let sort_duration = before_sort.elapsed();
 
-    println!("{}", sort_duration.as_secs_f64());
-    eprintln!("Output files: {:?}", output_files);
+    // if proc.is_some() {}
+    let rank = mpi_universe.map_or(0, |o| o.world().rank());
+    if rank == 0 {
+        println!("{}", sort_duration.as_secs_f64());
+    }
+    // eprintln!("Output files: {:?}", output_files);
 }

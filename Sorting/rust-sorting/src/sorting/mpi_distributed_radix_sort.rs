@@ -13,7 +13,7 @@ use mpi::{environment::Universe, request::StaticScope, topology::SimpleCommunica
 use mpi::{request::WaitGuard, Rank};
 use rdst::RadixSort;
 use tokio::{
-    io::{AsyncBufRead, AsyncBufReadExt},
+    io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt},
     spawn,
     sync::Mutex,
 };
@@ -22,7 +22,13 @@ use crate::entry::{
     entries_to_u8_unsafe, radix_divide, u8_to_entries_unsafe, Entry, RadixDivider, SortedEntries,
 };
 
-const BLOCK_SIZE: usize = 10000; // 1 MB
+/// Size of the blocks of entries that will be transmitted to one worker in one go. In entries/ 100bytes
+const BLOCK_SIZE: usize = 10000; // 10000 Entries = 1 MB
+/// Size of datablocks that will be read from disk. In bytes
+const READ_BLOCK_SIZE: usize = 256 * 100 * 100;
+
+// Manager uses 2*READ_BLOCK_SIZE + 256*4*100*BLOCK_SIZE bytes of memory
+// The workers use the (TOTAL_DATA_SIZE/NUMBER_OF_WORKERS)*2 bytes of memory
 
 macro_rules! measure_time {
     // This macro takes an expression of type `expr` and prints
@@ -33,7 +39,7 @@ macro_rules! measure_time {
         let before = Instant::now();
         $preparation
         let duration = before.elapsed();
-        println!(
+        eprintln!(
             "{} took {} micros.",
             $name,
             duration.as_micros()
@@ -51,7 +57,7 @@ macro_rules! mark {
             let before = Instant::now();
             let value = $preparation;
             let duration = before.elapsed();
-            println!("{} took {} micros.", $name, duration.as_micros());
+            eprintln!("{} took {} micros.", $name, duration.as_micros());
             value
         }
     };
@@ -62,11 +68,10 @@ pub fn get_worker(bucket_id: i32, workers: i32) -> Rank {
 }
 
 pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
-    let universe = mpi::initialize().unwrap();
+    // let universe = mpi::initialize().unwrap();
     let world = SimpleCommunicator::world();
     let size = world.size();
     let rank = world.rank();
-    let start_time = Instant::now();
 
     let mut read_duration = Duration::new(0, 0);
     let mut copy_duration = Duration::new(0, 0);
@@ -74,7 +79,7 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
     let mut send_duration = Duration::new(0, 0);
     let mut post_duration = Duration::new(0, 0);
 
-    println!("Hello from process {} of {}", rank, size);
+    // println!("Hello from process {} of {}", rank, size);
 
     if rank == 0 {
         // let bytes = Vec::<u8>::new();
@@ -84,79 +89,115 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
 
             let mut radix_divider = RadixDivider::<BLOCK_SIZE>::new();
 
-            let mut reader = Arc::new(Mutex::new(tokio::io::BufReader::with_capacity(
-                100 * 256 * BLOCK_SIZE * 10,
-                file,
-            )));
-            let mut my_box: Box<[u8; 100 * 256 * BLOCK_SIZE]> =
-                Box::new([0; 100 * 256 * BLOCK_SIZE]);
-            let mut my_buffer = &mut *my_box;
-            let mut buffer_start: usize = 0;
+            let mut reader = Arc::new(Mutex::new(file));
+            let mut work_box: Arc<Mutex<Box<[u8; READ_BLOCK_SIZE]>>> =
+                Arc::new(Mutex::new(Box::new([0; READ_BLOCK_SIZE])));
+            let mut read_box: Arc<Mutex<Box<[u8; READ_BLOCK_SIZE]>>> =
+                Arc::new(Mutex::new(Box::new([0; READ_BLOCK_SIZE])));
+            // let mut my_buffer = &mut *my_box;
+            // let mut read_buffer = &mut *read_box;
             let mut buffer_end: usize = 0;
             // buffer.reserve(100 * 256 * BLOCK_SIZE);
 
             let mut send_task: Option<tokio::task::JoinHandle<()>> = Option::None;
+            let mut read_task: Option<tokio::task::JoinHandle<usize>> = Option::None;
 
             loop {
                 let before_read = Instant::now();
-                let length;
-                let before_copy;
+                // let length;
+                // let before_copy;
                 {
-                    let mut r = reader.lock().await;
-                    let read_buffer = mark!("fill_buf", r.fill_buf().await.unwrap());
-                    read_duration += before_read.elapsed();
-                    before_copy = Instant::now();
-                    length = read_buffer.len();
-                    my_buffer[buffer_end..(buffer_end + length)].copy_from_slice(read_buffer);
-                    buffer_end += length;
-                    r.consume(length);
+                    match read_task {
+                        Some(task) => {
+                            buffer_end = task.await.unwrap();
+                            if buffer_end == 0 {
+                                break;
+                            }
+                        }
+                        None => {}
+                    }
                 }
+                read_duration += before_read.elapsed();
                 {
-                    let r = reader.clone();
-                    let handle = tokio::spawn(async move {
-                        eprintln!("Awating buffer.");
-                        r.lock().await.fill_buf().await;
-                        eprintln!("Awated buffer.");
-                    });
-                    // handle.await.unwrap();
+                    let reader = reader.clone();
+                    let read_box = read_box.clone();
+                    let work_box = work_box.clone();
+
+                    read_task = Some(tokio::spawn(async move {
+                        let mut current_end = 0;
+                        let mut r = reader.lock().await;
+                        let mut read_box = read_box.lock().await;
+                        let read_buffer = &mut **read_box;
+                        while current_end % 100 != 0 || current_end == 0 {
+                            let length = r
+                                .read_buf(&mut &mut read_buffer[current_end..])
+                                .await
+                                .unwrap();
+                            // eprintln!("Read {} bytes", length);
+                            if length == 0 {
+                                break;
+                            }
+                            current_end += length;
+                        }
+
+                        let mut target_box = work_box.lock().await;
+
+                        std::mem::swap(&mut *target_box, &mut *read_box);
+                        return current_end;
+                        // if current_end == 0 {
+                        //     break;
+                        // }
+                    }));
                 }
+                let before_processing = Instant::now();
+                let before_copy = Instant::now();
+                let my_work_box = work_box.lock().await;
 
                 // buffer[y](read_buffer);
                 // reader.consume(length);
 
-                let entries = buffer_end / 100;
-                let real_length = entries * 100;
-                let overhang = buffer_end - real_length;
-                let buffer = &my_buffer[0..real_length];
+                let my_buffer = &my_work_box[..buffer_end];
+                let entries = unsafe {
+                    // assert!(buffer_end % 100 == 0);
+                    core::slice::from_raw_parts(
+                        my_buffer.as_ptr() as *const Entry,
+                        buffer_end / 100,
+                    )
+                };
+
+                copy_duration += before_copy.elapsed();
+                // let entries = buffer_end / 100;
+                // let real_length = entries * 100;
+                // let overhang = buffer_end - real_length;
+                // let buffer = &my_buffer[0..real_length];
+                // eprintln!("Length: {} , {}", real_length, buffer.len());
+                // eprintln!("Overhang: {}", overhang);
 
                 // spawn(reader.fill_buf());
 
                 // let buffer = read_buffer[0..real_length].to_vec();
                 // reader.consume(real_length);
-                copy_duration += before_copy.elapsed();
 
-                println!(
-                    "{}: Got buffer of length {} {}",
-                    Instant::now().duration_since(start_time).as_micros(),
-                    length,
-                    real_length
-                );
+                // println!(
+                //     "{}: Got buffer of length {} {}",
+                //     Instant::now().duration_since(start_time).as_micros(),
+                //     length,
+                //     real_length
+                // );
 
-                let before_processing = Instant::now();
-
-                if length == 0 {
-                    break;
-                }
-                let entries = unsafe {
-                    core::slice::from_raw_parts(buffer.as_ptr() as *const Entry, buffer.len() / 100)
-                };
+                // if length == 0 {
+                //     break;
+                // }
+                // let entries = unsafe {
+                //     core::slice::from_raw_parts(buffer.as_ptr() as *const Entry, buffer.len() / 100)
+                // };
 
                 radix_divider.push_all(entries);
 
                 processing_duration += before_processing.elapsed();
-                let all_buffers_ready = radix_divider.are_all_buffers_ready();
                 let before_send = Instant::now();
 
+                let all_buffers_ready = radix_divider.are_all_buffers_ready();
                 if all_buffers_ready {
                     let full_buffers = radix_divider.get_delegateable_buffers();
                     if let Some(send_task) = send_task.take() {
@@ -168,6 +209,12 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
                             let mut guards = Vec::new();
                             for buffer in &full_buffers {
                                 let (root, block) = buffer;
+                                // eprintln!(
+                                //     "Sending block {} to worker {} with length {}",
+                                //     root,
+                                //     target,
+                                //     block.len()
+                                // );
                                 if block.len() == 0 {
                                     return;
                                 }
@@ -178,9 +225,7 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
                                     world.process_at_rank(target).immediate_send(scope, block),
                                 ));
                             }
-                            measure_time!("wait for guard", {
-                                guards.clear();
-                            });
+                            guards.clear();
                         });
                     }));
                     // handle.await.unwrap();
@@ -188,13 +233,13 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
                 send_duration += before_send.elapsed();
                 let before_post = Instant::now();
 
-                if overhang > 0 {
-                    let (first, second) = my_buffer.split_at_mut(overhang);
-                    first.copy_from_slice(
-                        &second[(real_length - overhang)..(buffer_end - overhang)],
-                    );
-                }
-                buffer_end = overhang;
+                // if overhang > 0 {
+                //     let (first, second) = my_buffer.split_at_mut(overhang);
+                //     first.copy_from_slice(
+                //         &second[(real_length - overhang)..(buffer_end - overhang)],
+                //     );
+                // }
+                // buffer_end = overhang;
                 post_duration += before_post.elapsed();
             }
             if let Some(send_task) = send_task.take() {
@@ -257,22 +302,22 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
         let mut buffers: [Option<SortedEntries>; 256] = arr_macro::arr![None; 256];
         // let mut buffers: [Vec<Entry>; 256] = arr_macro::arr![Vec::new(); 256];
         measure_time!("node receiving", {
-            let mut buffer = SortedEntries::new();
+            // let buffer = SortedEntries::new();
             let mut counter = 0;
             loop {
                 let (data, _status) = world.process_at_rank(0).receive_vec::<u8>();
                 counter = counter + 1;
-                eprintln!(
-                    "{}: Process {} got message {}.",
-                    Instant::now().duration_since(start_time).as_micros(),
-                    rank,
-                    counter
-                );
+                // eprintln!(
+                //     "{}: Process {} got message {}.",
+                //     Instant::now().duration_since(start_time).as_micros(),
+                //     rank,
+                //     counter
+                // );
                 if data.len() == 1 && data[0] == 42 {
                     break;
                 }
                 let root = data[0].clone();
-                let mut input = u8_to_entries_unsafe(data);
+                let input = u8_to_entries_unsafe(data);
                 // input
                 //     .radix_sort_builder()
                 //     .with_single_threaded_tuner()
@@ -330,7 +375,7 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
             }
             let result_vec = entries_to_u8_unsafe(buffer);
             let root = result_vec[0];
-            eprintln!("Process {} repling with batch {}.", rank, root);
+            // eprintln!("Process {} repling with batch {}.", rank, root);
             world.process_at_rank(0).send(result_vec.as_slice());
         });
         world.process_at_rank(0).send(&[42u8]);
@@ -362,14 +407,22 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
     //     _ => unreachable!(),
     // }
     if rank == 0 {
-        println!("Read took {} micros.", read_duration.as_micros());
-        println!("Copy took {} micros.", copy_duration.as_micros());
-        println!(
+        print!(
+            "{},{},{},{},{},",
+            read_duration.as_secs_f64(),
+            copy_duration.as_secs_f64(),
+            processing_duration.as_secs_f64(),
+            send_duration.as_secs_f64(),
+            post_duration.as_secs_f32()
+        );
+        eprintln!("Read took {} micros.", read_duration.as_micros());
+        eprintln!("Copy took {} micros.", copy_duration.as_micros());
+        eprintln!(
             "Processing took {} micros.",
             processing_duration.as_micros()
         );
-        println!("Send took {} micros.", send_duration.as_micros());
-        println!("Post took {} micros.", post_duration.as_micros());
+        eprintln!("Send took {} micros.", send_duration.as_micros());
+        eprintln!("Post took {} micros.", post_duration.as_micros());
     }
     return vec![];
 }

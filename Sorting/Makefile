@@ -59,7 +59,8 @@ run-mpi:
 	./valsort output.sorted
 
 run-radix: 
-	unset CC && cd rust-sorting && cargo build --release --target=x86_64-unknown-linux-gnu
-	mpiexec -n 4 ../target/x86_64-unknown-linux-gnu/release/rust-sorting --algorithm mpi-distributed-radix-sort /mnt/toast/10gb.dat /mnt/toast/
-	# mpiexec -n 4 ../target/x86_64-unknown-linux-gnu/release/rust-sorting --algorithm mpi-distributed-radix-sort ./1gb.dat /mnt/toast/
+	export
+	unset CC && cd rust-sorting && cargo build --release
+	mpiexec -n 4 ../target/release/rust-sorting --algorithm mpi-distributed-radix-sort /mnt/toast/10gb.dat /mnt/toast/
+	# mpiexec -n 4 ../target/release/rust-sorting --algorithm mpi-distributed-radix-sort ./1gb.dat /mnt/toast/
 	./valsort /mnt/toast/output.sorted

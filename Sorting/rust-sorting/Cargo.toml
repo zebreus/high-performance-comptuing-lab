@@ -11,9 +11,11 @@ binrw = "0.13.2"
 bytes-cast = "0.3.0"
 clap = { version = "4.4.7", features = ["derive"] }
 crumsort = "0.1.0"
+futures = "0.3.29"
 glidesort = "0.1.2"
 itertools = "0.12.0"
 mpi = { version = "0.7.0", features = ["user-operations", "derive"] }
+nix = "0.27.1"
 rayon = "1.8.0"
 rdst = "0.20.11"
 rotated-array-set = "0.1.1"

@@ -28,15 +28,15 @@ struct Cli {
     algorithm: SortImplementation,
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() {
     let cli = Cli::parse();
 
     // Put the correct number of threads into rayons global thread pool
-    rayon::ThreadPoolBuilder::new()
-        .num_threads(cli.threads.unwrap_or(1))
-        .build_global()
-        .unwrap();
+    // rayon::ThreadPoolBuilder::new()
+    //     .num_threads(cli.threads.unwrap_or(1))
+    //     .build_global()
+    //     .unwrap();
 
     let algorithm = cli.algorithm;
     let output_is_directory = cli.output_directory.is_dir();
@@ -50,7 +50,8 @@ async fn main() {
 
     let mpi_version = mpi::environment::library_version();
     let mpi_universe = if mpi_version.is_ok() {
-        mpi::initialize()
+        // mpi::initialize();
+        mpi::initialize_with_threading(mpi::Threading::Single)
     } else {
         None
     };
@@ -66,7 +67,7 @@ async fn main() {
     let sort_duration = before_sort.elapsed();
 
     // if proc.is_some() {}
-    let rank = mpi_universe.map_or(0, |o| o.world().rank());
+    let rank = mpi_universe.map_or(0, |o| o.0.world().rank());
     if rank == 0 {
         println!("{}", sort_duration.as_secs_f64());
     }

@@ -226,11 +226,12 @@ where
     }
 
     /// Check if all buckets are filled with more than BLOCK_SIZE elements
-    pub fn are_all_buffers_ready(&mut self) -> bool {
+    pub fn ready_to_delegate(&mut self) -> bool {
         !self.positions.iter().any(|position| position < &BLOCK_SIZE)
     }
 }
 
+#[derive(Debug)]
 pub struct SortedEntries {
     entries: Vec<Entry>,
     others: Vec<Vec<Entry>>,

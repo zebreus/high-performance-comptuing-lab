@@ -1,0 +1,9 @@
+[build]
+rustflags = [
+    "--cfg",
+    "tokio_unstable",
+    "-C",
+    "opt-level=3",
+    "-C",
+    "target-cpu=native",
+]

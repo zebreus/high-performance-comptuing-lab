@@ -1,31 +1,35 @@
 use core::panic;
 use std::{
-    fs::File,
     io::{BufWriter, Write},
+    os::fd::AsRawFd,
     path::{Path, PathBuf},
+    rc::Rc,
     sync::Arc,
-    thread::JoinHandle,
     time::{Duration, Instant},
 };
 
-use itertools::Itertools;
-use mpi::{environment::Universe, request::StaticScope, topology::SimpleCommunicator, traits::*};
+use futures::future::join_all;
 use mpi::{request::WaitGuard, Rank};
-use rdst::RadixSort;
+use mpi::{topology::SimpleCommunicator, traits::*};
+use nix::libc::{posix_fadvise64, POSIX_FADV_NOREUSE, POSIX_FADV_SEQUENTIAL, POSIX_FADV_WILLNEED};
 use tokio::{
-    io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt},
+    io::AsyncReadExt,
+    runtime::{Handle, Runtime},
     spawn,
     sync::Mutex,
 };
 
 use crate::entry::{
-    entries_to_u8_unsafe, radix_divide, u8_to_entries_unsafe, Entry, RadixDivider, SortedEntries,
+    entries_to_u8_unsafe, u8_to_entries_unsafe, Entry, RadixDivider, SortedEntries,
 };
 
 /// Size of the blocks of entries that will be transmitted to one worker in one go. In entries/ 100bytes
 const BLOCK_SIZE: usize = 10000; // 10000 Entries = 1 MB
 /// Size of datablocks that will be read from disk. In bytes
 const READ_BLOCK_SIZE: usize = 256 * 100 * 100;
+/// Minimum size read before starting to sort. In bytes
+/// Has to be smaller than READ_BLOCK_SIZE
+const MIN_READ_BLOCK_SIZE: usize = 0;
 
 // Manager uses 2*READ_BLOCK_SIZE + 256*4*100*BLOCK_SIZE bytes of memory
 // The workers use the (TOTAL_DATA_SIZE/NUMBER_OF_WORKERS)*2 bytes of memory
@@ -47,21 +51,21 @@ macro_rules! measure_time {
     };
 }
 
-macro_rules! mark {
-    // This macro takes an expression of type `expr` and prints
-    // it as a string along with its result.
-    // The `expr` designator is used for expressions.
-    ( $name:expr, $preparation:expr   ) => {
-        // `stringify!` will convert the expression *as it is* into a string.
-        {
-            let before = Instant::now();
-            let value = $preparation;
-            let duration = before.elapsed();
-            eprintln!("{} took {} micros.", $name, duration.as_micros());
-            value
-        }
-    };
-}
+// macro_rules! mark {
+//     // This macro takes an expression of type `expr` and prints
+//     // it as a string along with its result.
+//     // The `expr` designator is used for expressions.
+//     ( $name:expr, $preparation:expr   ) => {
+//         // `stringify!` will convert the expression *as it is* into a string.
+//         {
+//             let before = Instant::now();
+//             let value = $preparation;
+//             let duration = before.elapsed();
+//             eprintln!("{} took {} micros.", $name, duration.as_micros());
+//             value
+//         }
+//     };
+// }
 
 pub fn get_worker(bucket_id: i32, workers: i32) -> Rank {
     return ((bucket_id as i32) % workers) + 1;
@@ -73,67 +77,87 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
     let size = world.size();
     let rank = world.rank();
 
-    let mut read_duration = Duration::new(0, 0);
-    let mut copy_duration = Duration::new(0, 0);
-    let mut processing_duration = Duration::new(0, 0);
-    let mut send_duration = Duration::new(0, 0);
-    let mut post_duration = Duration::new(0, 0);
-
-    // println!("Hello from process {} of {}", rank, size);
+    let mut time_spend_reading_the_input = Duration::new(0, 0);
+    let mut time_spend_dividing_the_input_into_buckets = Duration::new(0, 0);
+    let mut time_spend_sending_to_workers = Duration::new(0, 0);
+    let mut time_spend_receiving_on_worker = Duration::new(0, 0);
+    let mut time_spend_sorting_on_worker = Duration::new(0, 0);
+    let mut time_spend_writing_to_disk = Duration::new(0, 0);
+    let mut time_spend_receiving_from_workers = Duration::new(0, 0);
+    let mut time_spend_sending_to_manager = Duration::new(0, 0);
+    let mut time_spend_fetching_time_from_workers = Duration::new(0, 0);
 
     if rank == 0 {
-        // let bytes = Vec::<u8>::new();
-
         measure_time!("distributing", {
             let file = tokio::fs::File::open(input_file).await.unwrap();
+            let file_length = file.metadata().await.unwrap().len();
+            unsafe {
+                let fd = file.as_raw_fd();
+                let fadvise_result =
+                    posix_fadvise64(fd, 0, file_length as i64, POSIX_FADV_SEQUENTIAL);
+                assert_eq!(fadvise_result, 0);
+                let fadvise_result = posix_fadvise64(fd, 0, file_length as i64, POSIX_FADV_NOREUSE);
+                assert_eq!(fadvise_result, 0);
+            };
 
             let mut radix_divider = RadixDivider::<BLOCK_SIZE>::new();
 
-            let mut reader = Arc::new(Mutex::new(file));
-            let mut work_box: Arc<Mutex<Box<[u8; READ_BLOCK_SIZE]>>> =
+            let reader = Arc::new(Mutex::new((0, file)));
+            let work_box: Arc<Mutex<Box<[u8; READ_BLOCK_SIZE]>>> =
                 Arc::new(Mutex::new(Box::new([0; READ_BLOCK_SIZE])));
-            let mut read_box: Arc<Mutex<Box<[u8; READ_BLOCK_SIZE]>>> =
+            let read_box: Arc<Mutex<Box<[u8; READ_BLOCK_SIZE]>>> =
                 Arc::new(Mutex::new(Box::new([0; READ_BLOCK_SIZE])));
-            // let mut my_buffer = &mut *my_box;
-            // let mut read_buffer = &mut *read_box;
-            let mut buffer_end: usize = 0;
-            // buffer.reserve(100 * 256 * BLOCK_SIZE);
+            let mut work_buffer_end: usize = 0;
 
             let mut send_task: Option<tokio::task::JoinHandle<()>> = Option::None;
+            let mut send_tasks: Vec<tokio::task::JoinHandle<()>> = Vec::new();
+
             let mut read_task: Option<tokio::task::JoinHandle<usize>> = Option::None;
 
             loop {
                 let before_read = Instant::now();
-                // let length;
-                // let before_copy;
                 {
                     match read_task {
                         Some(task) => {
-                            buffer_end = task.await.unwrap();
-                            if buffer_end == 0 {
+                            work_buffer_end = task.await.unwrap();
+                            if work_buffer_end == 0 {
                                 break;
                             }
                         }
                         None => {}
                     }
                 }
-                read_duration += before_read.elapsed();
                 {
-                    let reader = reader.clone();
+                    let reader_and_pos = reader.clone();
                     let read_box = read_box.clone();
                     let work_box = work_box.clone();
 
                     read_task = Some(tokio::spawn(async move {
                         let mut current_end = 0;
-                        let mut r = reader.lock().await;
+                        let mut reader_and_pos = reader_and_pos.lock().await;
+                        unsafe {
+                            let fd = reader_and_pos.1.as_raw_fd();
+                            let read_length = (READ_BLOCK_SIZE % (4096 * 512)) * (4096 * 512);
+                            let fadvise_result = posix_fadvise64(
+                                fd,
+                                reader_and_pos.0,
+                                read_length as i64,
+                                POSIX_FADV_WILLNEED,
+                            );
+                            assert_eq!(fadvise_result, 0);
+                        };
                         let mut read_box = read_box.lock().await;
                         let read_buffer = &mut **read_box;
-                        while current_end % 100 != 0 || current_end == 0 {
-                            let length = r
+                        while current_end % 100 != 0
+                            || current_end == 0
+                            || current_end < MIN_READ_BLOCK_SIZE
+                        {
+                            let length = reader_and_pos
+                                .1
                                 .read_buf(&mut &mut read_buffer[current_end..])
                                 .await
                                 .unwrap();
-                            // eprintln!("Read {} bytes", length);
+                            reader_and_pos.0 += length as i64;
                             if length == 0 {
                                 break;
                             }
@@ -144,60 +168,27 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
 
                         std::mem::swap(&mut *target_box, &mut *read_box);
                         return current_end;
-                        // if current_end == 0 {
-                        //     break;
-                        // }
                     }));
                 }
+                time_spend_reading_the_input += before_read.elapsed();
                 let before_processing = Instant::now();
-                let before_copy = Instant::now();
                 let my_work_box = work_box.lock().await;
 
-                // buffer[y](read_buffer);
-                // reader.consume(length);
-
-                let my_buffer = &my_work_box[..buffer_end];
+                let my_buffer = &my_work_box[..work_buffer_end];
                 let entries = unsafe {
-                    // assert!(buffer_end % 100 == 0);
+                    assert!(work_buffer_end % 100 == 0);
                     core::slice::from_raw_parts(
                         my_buffer.as_ptr() as *const Entry,
-                        buffer_end / 100,
+                        work_buffer_end / 100,
                     )
                 };
 
-                copy_duration += before_copy.elapsed();
-                // let entries = buffer_end / 100;
-                // let real_length = entries * 100;
-                // let overhang = buffer_end - real_length;
-                // let buffer = &my_buffer[0..real_length];
-                // eprintln!("Length: {} , {}", real_length, buffer.len());
-                // eprintln!("Overhang: {}", overhang);
-
-                // spawn(reader.fill_buf());
-
-                // let buffer = read_buffer[0..real_length].to_vec();
-                // reader.consume(real_length);
-
-                // println!(
-                //     "{}: Got buffer of length {} {}",
-                //     Instant::now().duration_since(start_time).as_micros(),
-                //     length,
-                //     real_length
-                // );
-
-                // if length == 0 {
-                //     break;
-                // }
-                // let entries = unsafe {
-                //     core::slice::from_raw_parts(buffer.as_ptr() as *const Entry, buffer.len() / 100)
-                // };
-
                 radix_divider.push_all(entries);
 
-                processing_duration += before_processing.elapsed();
+                time_spend_dividing_the_input_into_buckets += before_processing.elapsed();
                 let before_send = Instant::now();
 
-                let all_buffers_ready = radix_divider.are_all_buffers_ready();
+                let all_buffers_ready = radix_divider.ready_to_delegate();
                 if all_buffers_ready {
                     let full_buffers = radix_divider.get_delegateable_buffers();
                     if let Some(send_task) = send_task.take() {
@@ -230,17 +221,7 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
                     }));
                     // handle.await.unwrap();
                 }
-                send_duration += before_send.elapsed();
-                let before_post = Instant::now();
-
-                // if overhang > 0 {
-                //     let (first, second) = my_buffer.split_at_mut(overhang);
-                //     first.copy_from_slice(
-                //         &second[(real_length - overhang)..(buffer_end - overhang)],
-                //     );
-                // }
-                // buffer_end = overhang;
-                post_duration += before_post.elapsed();
+                time_spend_sending_to_workers += before_send.elapsed();
             }
             if let Some(send_task) = send_task.take() {
                 send_task.await.unwrap();
@@ -262,12 +243,14 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
                     ));
                 }
             });
-            send_duration += before_send.elapsed();
+            time_spend_sending_to_workers += before_send.elapsed();
 
             for i in 0..(size - 1) {
                 world.process_at_rank(i + 1).send(&[42u8]);
             }
+            time_spend_sending_to_workers += before_send.elapsed();
         });
+
         // Now we have distributed that stuff, lets try to get the sorted data back
 
         let mut writer_thread: Option<tokio::task::JoinHandle<()>> = Option::None;
@@ -276,11 +259,14 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
         let writer = Arc::new(Mutex::new(BufWriter::new(output_file)));
 
         for bucket_id in 0..=255 {
+            let receive_start = Instant::now();
             let node = get_worker(bucket_id, size - 1);
             let (data, _status) = world.process_at_rank(node).receive_vec::<u8>();
             if data.len() == 1 && data[0] == 42 {
                 panic!("Got done from node {} when expecting a result", node);
             }
+            time_spend_receiving_from_workers += receive_start.elapsed();
+            let before_write = Instant::now();
             if let Some(thread) = writer_thread.take() {
                 thread.await.unwrap();
             }
@@ -289,140 +275,319 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
                 let mut writer = writer.lock().await;
                 writer.write_all(&data).unwrap();
             }));
+            time_spend_writing_to_disk += before_write.elapsed();
         }
 
+        let before_write = Instant::now();
         if let Some(thread) = writer_thread.take() {
             thread.await.unwrap();
         }
         writer.lock().await.flush().unwrap();
+        time_spend_writing_to_disk += before_write.elapsed();
     }
 
     if rank != 0 {
-        // let mut buffers: Vec<Vec<Entry>> = Vec::new();
         let mut buffers: [Option<SortedEntries>; 256] = arr_macro::arr![None; 256];
-        // let mut buffers: [Vec<Entry>; 256] = arr_macro::arr![Vec::new(); 256];
-        measure_time!("node receiving", {
-            // let buffer = SortedEntries::new();
-            let mut counter = 0;
-            loop {
-                let (data, _status) = world.process_at_rank(0).receive_vec::<u8>();
-                counter = counter + 1;
-                // eprintln!(
-                //     "{}: Process {} got message {}.",
-                //     Instant::now().duration_since(start_time).as_micros(),
-                //     rank,
-                //     counter
-                // );
-                if data.len() == 1 && data[0] == 42 {
-                    break;
-                }
-                let root = data[0].clone();
-                let input = u8_to_entries_unsafe(data);
-                // input
-                //     .radix_sort_builder()
-                //     .with_single_threaded_tuner()
-                //     .with_parallel(false)
-                //     .sort();
-                // glidesort::sort(&mut input);
-                // buffers.push(input);
 
-                // if buffers[root as usize].is_some() {
-                //     buffers[root as usize].as_mut().and_then(|buffer| {
-                //         Some(buffer.join(SortedEntries::trust_me_bro_this_is_already_sorted(input)))
-                //     });
-                // } else {
-                //     buffers[root as usize] =
-                //         Some(SortedEntries::trust_me_bro_this_is_already_sorted(input));
-                // }
-
-                // input.sort_unstable();
-                // buffers[root as usize].append(&mut input);
-                if buffers[root as usize].is_some() {
-                    buffers[root as usize].as_mut().unwrap().join(input);
-                } else {
-                    buffers[root as usize] = Some(input.into());
-                }
+        // Solution one: Completly synchronous
+        loop {
+            let before_receiving = Instant::now();
+            let (data, _status) = world.process_at_rank(0).receive_vec::<u8>();
+            time_spend_receiving_on_worker += before_receiving.elapsed();
+            let before_sorting = Instant::now();
+            if data.len() == 1 && data[0] == 42 {
+                break;
             }
-        });
+            let root = data[0].clone();
+            let input = u8_to_entries_unsafe(data);
+            if buffers[root as usize].is_some() {
+                buffers[root as usize].as_mut().unwrap().join(input);
+            } else {
+                buffers[root as usize] = Some(input.into());
+            }
+            time_spend_sorting_on_worker += before_sorting.elapsed();
+        }
 
-        // eprintln!("Process {} got {} entries.", rank, buffer.len());
-        // vecc.radix_sort_builder()
-        //     .with_single_threaded_tuner()
-        //     .with_parallel(false)
-        //     .sort();
-
-        // let temp: &[Entry] = &vecc.clone()[0..10];
-        // let debug_buffers = &temp
-        //     .into_iter()
-        //     .map(|entry| entry.key())
-        //     .collect::<Vec<_>>();
-        // println!("BUFFERS: {:?}", debug_buffers)
-        // measure_time!("actually sorting", {
-        //     buffers.iter_mut().for_each(|buffer| {
-        //         // buffer
-        //         //     .radix_sort_builder()
-        //         //     .with_single_threaded_tuner()
-        //         //     .with_parallel(false)
-        //         //     .sort();
-        //         // glidesort::sort(buffer);
-        //         buffer.sort_unstable();
+        // // Solution two: Asynchronous receiving using openMPI. No benefit
+        // let mut buffer_a = Box::new([0u8; 2 * BLOCK_SIZE * 100]);
+        // let mut buffer_b = Box::new([0u8; 2 * BLOCK_SIZE * 100]);
+        // let mut length: usize = 0;
+        // loop {
+        //     mpi::request::scope(|scope_b| {
+        //         let before_receiving = Instant::now();
+        //         let world = SimpleCommunicator::world();
+        //         let request = world
+        //             .process_at_rank(0)
+        //             .immediate_receive_into(scope_b, &mut *buffer_a);
+        //         time_spend_receiving_on_worker += before_receiving.elapsed();
+        //
+        //         let before_sorting = Instant::now();
+        //         let root = buffer_b[0].clone();
+        //         let input = unsafe {
+        //             assert!(length % 100 == 0);
+        //             core::slice::from_raw_parts(buffer_b.as_ptr() as *const Entry, length / 100)
+        //         };
+        //         if buffers[root as usize].is_some() {
+        //             buffers[root as usize]
+        //                 .as_mut()
+        //                 .unwrap()
+        //                 .join(input.to_vec());
+        //         } else {
+        //             buffers[root as usize] = Some(input.to_vec().into());
+        //         }
+        //         time_spend_sorting_on_worker += before_sorting.elapsed();
+        //
+        //         let before_receiving = Instant::now();
+        //         let status = request.wait();
+        //         length = status.count(0u8.as_datatype()) as usize;
+        //         time_spend_receiving_on_worker += before_receiving.elapsed();
         //     });
-        // });
+        //     if length == 1 && buffer_a[0] == 42 {
+        //         break;
+        //     }
+        //     std::mem::swap(&mut buffer_a, &mut buffer_b);
+        // }
+
+        // Solution three: Asynchronous receiving using tokio
+        // let mut receive_task: Option<tokio::task::JoinHandle<Vec<u8>>> = Option::None;
+        // loop {
+        //     let before_receiving = Instant::now();
+        //     // if let Some(task) = receive_task {}
+        //     let maybe_output = match receive_task.take() {
+        //         Some(input) => {
+        //             let vec = input.await.unwrap();
+        //             if vec.len() == 1 && vec[0] == 42 {
+        //                 break;
+        //             }
+        //             Some(vec)
+        //         }
+        //         None => None,
+        //     };
+        //
+        //     receive_task = Some(spawn(async {
+        //         let world = SimpleCommunicator::world();
+        //         let (data, _status) = world.process_at_rank(0).receive_vec::<u8>();
+        //         return data;
+        //     }));
+        //
+        //     let Some(data) = maybe_output else {
+        //         continue;
+        //     };
+        //
+        //     time_spend_receiving_on_worker += before_receiving.elapsed();
+        //
+        //     let before_sorting = Instant::now();
+        //     let root = data[0].clone();
+        //     let input = u8_to_entries_unsafe(data);
+        //     if buffers[root as usize].is_some() {
+        //         buffers[root as usize].as_mut().unwrap().join(input);
+        //     } else {
+        //         buffers[root as usize] = Some(input.into());
+        //     }
+        //     time_spend_sorting_on_worker += before_sorting.elapsed();
+        // }
+
+        // // Solution four: Asynchronous calculation using tokio
+        // // Only one thread for sorting
+        // // Could be improved by using multiple threads for sorting
+        // // That way would probably only be IO bound, if we have enough cores
+        // let mut buffers: Arc<Mutex<[Option<SortedEntries>; 256]>> =
+        //     Arc::new(Mutex::new(arr_macro::arr![None; 256]));
+        // let mut sort_task: Option<tokio::task::JoinHandle<()>> = Option::None;
+        // loop {
+        //     let before_receiving = Instant::now();
+        //     let (data, _status) = world.process_at_rank(0).receive_vec::<u8>();
+        //     if data.len() == 1 && data[0] == 42 {
+        //         break;
+        //     }
+        //     time_spend_receiving_on_worker += before_receiving.elapsed();
+        //
+        //     let before_sorting = Instant::now();
+        //     let buffers = buffers.clone();
+        //     if let Some(task) = sort_task.take() {
+        //         task.await.unwrap();
+        //     }
+        //     sort_task = Some(spawn(async move {
+        //         let before_sorting = Instant::now();
+        //         let mut buffers = buffers.lock().await;
+        //         let root = data[0].clone();
+        //         let input = u8_to_entries_unsafe(data);
+        //         if buffers[root as usize].is_some() {
+        //             buffers[root as usize].as_mut().unwrap().join(input);
+        //         } else {
+        //             buffers[root as usize] = Some(input.into());
+        //         }
+        //         time_spend_sorting_on_worker += before_sorting.elapsed();
+        //     }));
+        //     time_spend_sorting_on_worker += before_sorting.elapsed();
+        // }
+        // if let Some(task) = sort_task.take() {
+        //     task.await.unwrap();
+        // }
+
+        // // Solution four: Asynchronous calculation using tokio
+        // // Only one thread for sorting
+        // // Could be improved by using multiple threads for sorting
+        // // That way would probably only be IO bound, if we have enough cores
+        // let mut buffers: std::sync::Arc<std::sync::Mutex<[Option<SortedEntries>; 256]>> =
+        //     std::sync::Arc::new(std::sync::Mutex::new(arr_macro::arr![None; 256]));
+        // let mut sort_task: Option<std::thread::JoinHandle<()>> = Option::None;
+        // loop {
+        //     let before_receiving = Instant::now();
+        //     let (data, _status) = world.process_at_rank(0).receive_vec::<u8>();
+        //     if data.len() == 1 && data[0] == 42 {
+        //         break;
+        //     }
+        //     time_spend_receiving_on_worker += before_receiving.elapsed();
+        //
+        //     let before_sorting = Instant::now();
+        //     let buffers = buffers.clone();
+        //     sort_task = Some(std::thread::spawn(move || {
+        //         if let Some(task) = sort_task.take() {
+        //             task.join().unwrap();
+        //         }
+        //         let before_sorting = Instant::now();
+        //         let mut buffers = buffers.lock().unwrap();
+        //         let root = data[0].clone();
+        //         let input = u8_to_entries_unsafe(data);
+        //         if buffers[root as usize].is_some() {
+        //             buffers[root as usize].as_mut().unwrap().join(input);
+        //         } else {
+        //             buffers[root as usize] = Some(input.into());
+        //         }
+        //         time_spend_sorting_on_worker += before_sorting.elapsed();
+        //     }));
+        //     time_spend_sorting_on_worker += before_sorting.elapsed();
+        // }
+        // if let Some(task) = sort_task.take() {
+        //     task.join().unwrap();
+        // }
+        // let mut buffers = buffers.lock().unwrap();
+        // let bufferss = &mut *buffers;
+        // let mut buffers = arr_macro::arr![None; 256];
+        // std::mem::swap(bufferss, &mut empty_buffers);
+
+        let world = SimpleCommunicator::world();
+        let send_start = Instant::now();
         buffers.into_iter().for_each(|buffer| {
             let buffer = buffer.map(|b| b.into_vec()).unwrap_or(Vec::new());
             if buffer.len() == 0 {
                 return;
             }
             let result_vec = entries_to_u8_unsafe(buffer);
-            let root = result_vec[0];
-            // eprintln!("Process {} repling with batch {}.", rank, root);
             world.process_at_rank(0).send(result_vec.as_slice());
         });
-        world.process_at_rank(0).send(&[42u8]);
-
-        // measure_time!("node sending", {
-        //     let result_chunks = result_vec.chunks(BLOCK_SIZE * 100);
-        //     let mut result_counter = 0;
-        //     for chunk in result_chunks {
-        //         result_counter += 1;
-        //         eprintln!("Process {} repling chunk {}.", rank, result_counter);
-        //         world.process_at_rank(0).send(chunk);
-        //     }
-        //     world.process_at_rank(0).send(&[42u8]);
-        // });
+        // world.process_at_rank(0).send(&[42u8]);
+        time_spend_sending_to_manager += send_start.elapsed();
     }
 
-    // match rank {
-    //     0 => {
-    //         let msg = vec![4.0f64, 8.0, 15.0];
-    //         world.process_at_rank(rank + 1).send(&msg[..]);
-    //     }
-    //     1 => {
-    //         let (msg, status) = world.any_process().receive_vec::<f64>();
-    //         println!(
-    //             "Process {} got message {:?}.\nStatus is: {:?}",
-    //             rank, msg, status
-    //         );
-    //     }
-    //     _ => unreachable!(),
-    // }
+    // Get the mean of the benchmark times from the workers
+    let fetch_time_start = Instant::now();
+    if rank == 0 {
+        let mut all_worker_times: [Vec<Duration>; 3] = [Vec::new(), Vec::new(), Vec::new()];
+        for i in 1..size {
+            let (worker_times, _) = world.process_at_rank(i).receive_vec::<u64>();
+            all_worker_times[0].push(Duration::from_micros(worker_times[0]));
+            all_worker_times[1].push(Duration::from_micros(worker_times[1]));
+            all_worker_times[2].push(Duration::from_micros(worker_times[2]));
+        }
+        all_worker_times[0].sort_unstable();
+        all_worker_times[1].sort_unstable();
+        all_worker_times[2].sort_unstable();
+        time_spend_receiving_on_worker = all_worker_times[0][size as usize / 2];
+        time_spend_sorting_on_worker = all_worker_times[1][size as usize / 2];
+        time_spend_sending_to_manager = all_worker_times[2][size as usize / 2];
+    }
+    if rank != 0 {
+        world.process_at_rank(0).send(&[
+            time_spend_receiving_on_worker.as_micros() as u64,
+            time_spend_sorting_on_worker.as_micros() as u64,
+            time_spend_sending_to_manager.as_micros() as u64,
+        ]);
+    }
+    time_spend_fetching_time_from_workers += fetch_time_start.elapsed();
+
     if rank == 0 {
         print!(
-            "{},{},{},{},{},",
-            read_duration.as_secs_f64(),
-            copy_duration.as_secs_f64(),
-            processing_duration.as_secs_f64(),
-            send_duration.as_secs_f64(),
-            post_duration.as_secs_f32()
+            "{},{},{},{},{},{},{},{},{},",
+            time_spend_reading_the_input.as_secs_f64(),
+            time_spend_dividing_the_input_into_buckets.as_secs_f64(),
+            time_spend_sending_to_workers.as_secs_f64(),
+            time_spend_writing_to_disk.as_secs_f64(),
+            time_spend_receiving_from_workers.as_secs_f64(),
+            time_spend_fetching_time_from_workers.as_secs_f64(),
+            time_spend_receiving_on_worker.as_secs_f64(),
+            time_spend_sorting_on_worker.as_secs_f64(),
+            time_spend_sending_to_manager.as_secs_f64(),
         );
-        eprintln!("Read took {} micros.", read_duration.as_micros());
-        eprintln!("Copy took {} micros.", copy_duration.as_micros());
+        let total_time_distributing = time_spend_reading_the_input
+            + time_spend_dividing_the_input_into_buckets
+            + time_spend_sending_to_workers;
+        let total_time_collecting = time_spend_receiving_from_workers + time_spend_writing_to_disk;
         eprintln!(
-            "Processing took {} micros.",
-            processing_duration.as_micros()
+            "Distributing took {:.8} seconds.",
+            (total_time_distributing).as_secs_f64()
         );
-        eprintln!("Send took {} micros.", send_duration.as_micros());
-        eprintln!("Post took {} micros.", post_duration.as_micros());
+        eprintln!(
+            "Collecting took {:.8} seconds.",
+            (total_time_collecting).as_secs_f64()
+        );
+        eprintln!("");
+        eprintln!(
+            "Read took {:.8} seconds.",
+            time_spend_reading_the_input.as_secs_f64()
+        );
+        eprintln!(
+            "Processing took {:.8} seconds.",
+            time_spend_dividing_the_input_into_buckets.as_secs_f64()
+        );
+        eprintln!(
+            "Send took {:.8} seconds.",
+            time_spend_sending_to_workers.as_secs_f64()
+        );
+        eprintln!(
+            "Write took {:.8} seconds.",
+            time_spend_writing_to_disk.as_secs_f64()
+        );
+        eprintln!(
+            "Receive took {:.8} seconds.",
+            time_spend_receiving_from_workers.as_secs_f64()
+        );
+        eprintln!(
+            "Fetching time from workers took {:.8} seconds.",
+            time_spend_fetching_time_from_workers.as_secs_f64()
+        );
+        eprintln!(
+            "Receiving on worker took {:.8} seconds.",
+            time_spend_receiving_on_worker.as_secs_f64()
+        );
+        eprintln!(
+            "Actually sorting took {:.8} seconds.",
+            time_spend_sorting_on_worker.as_secs_f64()
+        );
+        eprintln!(
+            "Sending back to manager took {:.8} seconds.",
+            time_spend_sending_to_manager.as_secs_f64()
+        );
     }
+    let metrics = Handle::current().metrics();
+
+    // eprintln!("Node {} has {:?} workers", rank, metrics);
+    eprintln!("Node {} has {:?} workers", rank, metrics.num_workers());
+    eprintln!(
+        "Node {} has {:?} threads",
+        rank,
+        metrics.num_blocking_threads()
+    );
+    eprintln!(
+        "Node {} has {:?} active tasks",
+        rank,
+        metrics.active_tasks_count()
+    );
+    eprintln!(
+        "Node {} has {:?} outside scheduled tasks scheduled from outside of the runtime.",
+        rank,
+        metrics.remote_schedule_count()
+    );
     return vec![];
 }

@@ -88,9 +88,9 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
     let mut time_spend_fetching_time_from_workers = Duration::new(0, 0);
 
     if rank == 0 {
+        let file = tokio::fs::File::open(input_file).await.unwrap();
+        let file_length = file.metadata().await.unwrap().len();
         measure_time!("distributing", {
-            let file = tokio::fs::File::open(input_file).await.unwrap();
-            let file_length = file.metadata().await.unwrap().len();
             unsafe {
                 let fd = file.as_raw_fd();
                 let fadvise_result =
@@ -259,10 +259,16 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
         let writer = Arc::new(Mutex::new(BufWriter::new(output_file)));
 
         for bucket_id in 0..=255 {
+            // A bit more than 1 Bucket
+            let mut receive_buffer = vec![0u8; (file_length as usize / 256) * 11 / 10];
             let receive_start = Instant::now();
             let node = get_worker(bucket_id, size - 1);
-            let (data, _status) = world.process_at_rank(node).receive_vec::<u8>();
-            if data.len() == 1 && data[0] == 42 {
+            let status = world
+                .process_at_rank(node)
+                .receive_into(&mut receive_buffer);
+            let bytes = 500 as usize;
+            // let data = ;
+            if bytes == 1 && receive_buffer[0] == 42 {
                 panic!("Got done from node {} when expecting a result", node);
             }
             time_spend_receiving_from_workers += receive_start.elapsed();
@@ -273,7 +279,7 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
             let writer = Arc::clone(&writer);
             writer_thread = Some(spawn(async move {
                 let mut writer = writer.lock().await;
-                writer.write_all(&data).unwrap();
+                writer.write_all(&receive_buffer[..bytes]).unwrap();
             }));
             time_spend_writing_to_disk += before_write.elapsed();
         }
@@ -291,8 +297,14 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
 
         // Solution one: Completly synchronous
         loop {
+            let mut data = Vec::<u8>::with_capacity(BLOCK_SIZE * 100 * 2);
             let before_receiving = Instant::now();
-            let (data, _status) = world.process_at_rank(0).receive_vec::<u8>();
+            unsafe {
+                data.set_len(BLOCK_SIZE * 100 * 2);
+                let status = world.process_at_rank(0).receive_into(&mut *data);
+                let length = status.count(0u8.as_datatype()) as usize;
+                data.set_len(length);
+            };
             time_spend_receiving_on_worker += before_receiving.elapsed();
             let before_sorting = Instant::now();
             if data.len() == 1 && data[0] == 42 {
@@ -494,9 +506,9 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
         all_worker_times[0].sort_unstable();
         all_worker_times[1].sort_unstable();
         all_worker_times[2].sort_unstable();
-        time_spend_receiving_on_worker = all_worker_times[0][size as usize / 2];
-        time_spend_sorting_on_worker = all_worker_times[1][size as usize / 2];
-        time_spend_sending_to_manager = all_worker_times[2][size as usize / 2];
+        time_spend_receiving_on_worker = all_worker_times[0][(size as usize - 1) / 2];
+        time_spend_sorting_on_worker = all_worker_times[1][(size as usize - 1) / 2];
+        time_spend_sending_to_manager = all_worker_times[2][(size as usize - 1) / 2];
     }
     if rank != 0 {
         world.process_at_rank(0).send(&[

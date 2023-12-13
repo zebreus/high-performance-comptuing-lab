@@ -139,6 +139,22 @@ worker = firstByte % numberOfWorkers]->
 We did not have time to measure performance at the Virgo cluster. We did measure the performance on our local machines. We used a 10GB file with generated with gensort. The single node implemetation is the non-mpi implementation. The measurements for more than one node are the MPI implementation.
 <<sorting-data>> show that our MPI implementation is always slower than the single threaded implementation. This is probably due to the overhead of sending the data over the network. We could probably optimize our implementation to be better, but we did not have time to do so.
 
+=== Learnings
+
+Rust MPI is ok, but not great. It is not very ergonomic as it mostly just wraps C calls. The documentation is acceptable. One of the major pitfalls we encountered was with the `receive_vec` function which is a wrapper around `MPI_recv`. It puts the data directly in a heap allocated vector. It is quite slow for large buffers, as it does not know the size of the data it is receiving in advance, so it has to grow the Vec repeatedly. We ended up using `receive_into` a buffer instead, which is a bit more verbose, but much faster.
+
+We also learned that MPI has a limit of 2GB per buffer, which can be problematic when working with large datasets, like 100GB of sorting data.
+
+The posix fadvise API is cool and can be used to tell the OS that we are going to read a file sequentially and only once. This can improve performance by a tiny bit, as the kernel can prefetch more the data. Memadvise is probably also cool, but we did not have time to try it out.
+
+Lustre can be quite slow, probably due to congestion.
+
+=== Benchmarking protocol
+
+We want to benchmark our algorithm for the 1G entries dataset. Our benchmark has to read the data from the /tmp partition from a single node and write the result back to the /tmp partition on a single node. We do this, because we want to benchmark our algorithm (and the performance of the nodes and the networking performance). Sorting should happen in a distributed fashion.
+
+First, we will copy the data to the tmp partition of the root node to avoid the pitfalls of using lustre. THen...
+
 .Our MPI implementation
 :chart-id: id=sorting-data
 :vega-lite-filename: processed-assets/sorting-data.vl.json

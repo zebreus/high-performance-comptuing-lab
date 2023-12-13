@@ -12,12 +12,14 @@ use futures::future::join_all;
 use mpi::{request::WaitGuard, Rank};
 use mpi::{topology::SimpleCommunicator, traits::*};
 use nix::libc::{posix_fadvise64, POSIX_FADV_NOREUSE, POSIX_FADV_SEQUENTIAL, POSIX_FADV_WILLNEED};
+use tokio::io::AsyncWriteExt;
 use tokio::{
     io::AsyncReadExt,
     runtime::{Handle, Runtime},
     spawn,
     sync::Mutex,
-};
+    task::spawn_blocking,
+}; // for write_all()
 
 use crate::entry::{
     entries_to_u8_unsafe, u8_to_entries_unsafe, Entry, RadixDivider, SortedEntries,
@@ -132,7 +134,7 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
                     let read_box = read_box.clone();
                     let work_box = work_box.clone();
 
-                    read_task = Some(tokio::spawn(async move {
+                    read_task = Some(spawn(async move {
                         let mut current_end = 0;
                         let mut reader_and_pos = reader_and_pos.lock().await;
                         unsafe {
@@ -194,7 +196,7 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
                     if let Some(send_task) = send_task.take() {
                         send_task.await.unwrap();
                     }
-                    send_task = Some(spawn(async move {
+                    send_task = Some(spawn_blocking(move || {
                         let world = SimpleCommunicator::world();
                         mpi::request::scope(|scope| {
                             let mut guards = Vec::new();
@@ -266,7 +268,7 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
             let status = world
                 .process_at_rank(node)
                 .receive_into(&mut receive_buffer);
-            let bytes = 500 as usize;
+            let bytes = status.count(0u8.as_datatype()) as usize;
             // let data = ;
             if bytes == 1 && receive_buffer[0] == 42 {
                 panic!("Got done from node {} when expecting a result", node);
@@ -277,12 +279,54 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
                 thread.await.unwrap();
             }
             let writer = Arc::clone(&writer);
+            // writer_thread = Some(spawn_blocking(move || {
+            //     let mut writer = writer.blocking_lock();
+            //     writer.write_all(&receive_buffer[..bytes]).unwrap();
+            // }));
             writer_thread = Some(spawn(async move {
                 let mut writer = writer.lock().await;
                 writer.write_all(&receive_buffer[..bytes]).unwrap();
             }));
+            // writer_thread = Some(spawn(async move {
+            //     let mut writer = writer.lock().await;
+            //     spawn_blocking(move || {
+            //         writer.write_all(&receive_buffer[..16]).unwrap();
+            //     })
+            //     .await;
+            // }));
             time_spend_writing_to_disk += before_write.elapsed();
         }
+
+        // let mut writer_thread: Option<tokio::task::JoinHandle<()>> = Option::None;
+        // let output_file_path = output_directory.join("output.sorted");
+        // let output_file = tokio::fs::File::create(&output_file_path).await.unwrap();
+        // let writer = Arc::new(Mutex::new(output_file));
+
+        // for bucket_id in 0..=255 {
+        //     // A bit more than 1 Bucket
+        //     let mut receive_buffer = vec![0u8; (file_length as usize / 256) * 11 / 10];
+        //     let receive_start = Instant::now();
+        //     let node = get_worker(bucket_id, size - 1);
+        //     let status = world
+        //         .process_at_rank(node)
+        //         .receive_into(&mut receive_buffer);
+        //     let bytes = status.count(0u8.as_datatype()) as usize;
+        //     // let data = ;
+        //     if bytes == 1 && receive_buffer[0] == 42 {
+        //         panic!("Got done from node {} when expecting a result", node);
+        //     }
+        //     time_spend_receiving_from_workers += receive_start.elapsed();
+        //     let before_write = Instant::now();
+        //     if let Some(thread) = writer_thread.take() {
+        //         thread.await.unwrap();
+        //     }
+        //     let writer = Arc::clone(&writer);
+        //     writer_thread = Some(spawn(async move {
+        //         let mut writer = writer.lock().await;
+        //         writer.write_all(&receive_buffer[..bytes]).await.unwrap();
+        //     }));
+        //     time_spend_writing_to_disk += before_write.elapsed();
+        // }
 
         let before_write = Instant::now();
         if let Some(thread) = writer_thread.take() {
@@ -296,29 +340,29 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
         let mut buffers: [Option<SortedEntries>; 256] = arr_macro::arr![None; 256];
 
         // Solution one: Completly synchronous
-        loop {
-            let mut data = Vec::<u8>::with_capacity(BLOCK_SIZE * 100 * 2);
-            let before_receiving = Instant::now();
-            unsafe {
-                data.set_len(BLOCK_SIZE * 100 * 2);
-                let status = world.process_at_rank(0).receive_into(&mut *data);
-                let length = status.count(0u8.as_datatype()) as usize;
-                data.set_len(length);
-            };
-            time_spend_receiving_on_worker += before_receiving.elapsed();
-            let before_sorting = Instant::now();
-            if data.len() == 1 && data[0] == 42 {
-                break;
-            }
-            let root = data[0].clone();
-            let input = u8_to_entries_unsafe(data);
-            if buffers[root as usize].is_some() {
-                buffers[root as usize].as_mut().unwrap().join(input);
-            } else {
-                buffers[root as usize] = Some(input.into());
-            }
-            time_spend_sorting_on_worker += before_sorting.elapsed();
-        }
+        // loop {
+        //     let mut data = Vec::<u8>::with_capacity(BLOCK_SIZE * 100 * 2);
+        //     let before_receiving = Instant::now();
+        //     unsafe {
+        //         data.set_len(BLOCK_SIZE * 100 * 2);
+        //         let status = world.process_at_rank(0).receive_into(&mut *data);
+        //         let length = status.count(0u8.as_datatype()) as usize;
+        //         data.set_len(length);
+        //     };
+        //     time_spend_receiving_on_worker += before_receiving.elapsed();
+        //     let before_sorting = Instant::now();
+        //     if data.len() == 1 && data[0] == 42 {
+        //         break;
+        //     }
+        //     let root = data[0].clone();
+        //     let input = u8_to_entries_unsafe(data);
+        //     if buffers[root as usize].is_some() {
+        //         buffers[root as usize].as_mut().unwrap().join(input);
+        //     } else {
+        //         buffers[root as usize] = Some(input.into());
+        //     }
+        //     time_spend_sorting_on_worker += before_sorting.elapsed();
+        // }
 
         // // Solution two: Asynchronous receiving using openMPI. No benefit
         // let mut buffer_a = Box::new([0u8; 2 * BLOCK_SIZE * 100]);
@@ -375,19 +419,19 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
         //         }
         //         None => None,
         //     };
-        //
-        //     receive_task = Some(spawn(async {
+
+        //     receive_task = Some(spawn_blocking(move || {
         //         let world = SimpleCommunicator::world();
         //         let (data, _status) = world.process_at_rank(0).receive_vec::<u8>();
         //         return data;
         //     }));
-        //
+
         //     let Some(data) = maybe_output else {
         //         continue;
         //     };
-        //
+
         //     time_spend_receiving_on_worker += before_receiving.elapsed();
-        //
+
         //     let before_sorting = Instant::now();
         //     let root = data[0].clone();
         //     let input = u8_to_entries_unsafe(data);
@@ -403,39 +447,41 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
         // // Only one thread for sorting
         // // Could be improved by using multiple threads for sorting
         // // That way would probably only be IO bound, if we have enough cores
-        // let mut buffers: Arc<Mutex<[Option<SortedEntries>; 256]>> =
-        //     Arc::new(Mutex::new(arr_macro::arr![None; 256]));
-        // let mut sort_task: Option<tokio::task::JoinHandle<()>> = Option::None;
-        // loop {
-        //     let before_receiving = Instant::now();
-        //     let (data, _status) = world.process_at_rank(0).receive_vec::<u8>();
-        //     if data.len() == 1 && data[0] == 42 {
-        //         break;
-        //     }
-        //     time_spend_receiving_on_worker += before_receiving.elapsed();
-        //
-        //     let before_sorting = Instant::now();
-        //     let buffers = buffers.clone();
-        //     if let Some(task) = sort_task.take() {
-        //         task.await.unwrap();
-        //     }
-        //     sort_task = Some(spawn(async move {
-        //         let before_sorting = Instant::now();
-        //         let mut buffers = buffers.lock().await;
-        //         let root = data[0].clone();
-        //         let input = u8_to_entries_unsafe(data);
-        //         if buffers[root as usize].is_some() {
-        //             buffers[root as usize].as_mut().unwrap().join(input);
-        //         } else {
-        //             buffers[root as usize] = Some(input.into());
-        //         }
-        //         time_spend_sorting_on_worker += before_sorting.elapsed();
-        //     }));
-        //     time_spend_sorting_on_worker += before_sorting.elapsed();
-        // }
-        // if let Some(task) = sort_task.take() {
-        //     task.await.unwrap();
-        // }
+        let buffers: Arc<Mutex<[Option<SortedEntries>; 256]>> =
+            Arc::new(Mutex::new(arr_macro::arr![None; 256]));
+        let mut sort_task: Option<tokio::task::JoinHandle<()>> = Option::None;
+        loop {
+            let before_receiving = Instant::now();
+            let (data, _status) = world.process_at_rank(0).receive_vec::<u8>();
+            if data.len() == 1 && data[0] == 42 {
+                break;
+            }
+            time_spend_receiving_on_worker += before_receiving.elapsed();
+
+            let before_sorting = Instant::now();
+            let buffers = buffers.clone();
+            if let Some(task) = sort_task.take() {
+                task.await.unwrap();
+            }
+            sort_task = Some(spawn_blocking(move || {
+                let mut buffers = buffers.blocking_lock();
+                let root = data[0].clone();
+                let input = u8_to_entries_unsafe(data);
+                if buffers[root as usize].is_some() {
+                    buffers[root as usize].as_mut().unwrap().join(input);
+                } else {
+                    buffers[root as usize] = Some(input.into());
+                }
+            }));
+            time_spend_sorting_on_worker += before_sorting.elapsed();
+        }
+        if let Some(task) = sort_task.take() {
+            task.await.unwrap();
+        }
+        let mut buffers = buffers.lock().await;
+        let bufferss = &mut *buffers;
+        let mut buffers = arr_macro::arr![None; 256];
+        std::mem::swap(bufferss, &mut buffers);
 
         // // Solution four: Asynchronous calculation using tokio
         // // Only one thread for sorting

@@ -209,7 +209,7 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
                                 //     block.len()
                                 // );
                                 if block.len() == 0 {
-                                    return;
+                                    continue;
                                 }
                                 let target = get_worker(*root as i32, size - 1);
 
@@ -235,7 +235,7 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
                 for buffer in &full_buffers {
                     let (root, block) = buffer;
                     if block.len() == 0 {
-                        return;
+                        continue;
                     }
                     let target = get_worker(*root as i32, size - 1);
 
@@ -262,13 +262,15 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
 
         for bucket_id in 0..=255 {
             // A bit more than 1 Bucket
-            let mut receive_buffer = vec![0u8; (file_length as usize / 256) * 11 / 10];
+            // If the program crashes, it was probably because of this line
+            let mut receive_buffer = vec![0u8; ((file_length as usize / 256) * 3 / 2) + 5000];
             let receive_start = Instant::now();
             let node = get_worker(bucket_id, size - 1);
             let status = world
                 .process_at_rank(node)
                 .receive_into(&mut receive_buffer);
             let bytes = status.count(0u8.as_datatype()) as usize;
+            println!("Received {} bytes", bytes);
             // let data = ;
             if bytes == 1 && receive_buffer[0] == 42 {
                 panic!("Got done from node {} when expecting a result", node);
@@ -527,11 +529,16 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
 
         let world = SimpleCommunicator::world();
         let send_start = Instant::now();
-        buffers.into_iter().for_each(|buffer| {
-            let buffer = buffer.map(|b| b.into_vec()).unwrap_or(Vec::new());
-            if buffer.len() == 0 {
+        buffers.into_iter().enumerate().for_each(|(root, buffer)| {
+            let for_worker = get_worker(root as i32, size - 1);
+            if for_worker != rank {
+                if buffer.is_some() {
+                    panic!("Worker {} has buffer for worker {}", rank, for_worker);
+                }
                 return;
             }
+
+            let buffer = buffer.map(|b| b.into_vec()).unwrap_or(Vec::new());
             let result_vec = entries_to_u8_unsafe(buffer);
             world.process_at_rank(0).send(result_vec.as_slice());
         });

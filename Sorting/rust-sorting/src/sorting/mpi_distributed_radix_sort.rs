@@ -270,8 +270,6 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
                 .process_at_rank(node)
                 .receive_into(&mut receive_buffer);
             let bytes = status.count(0u8.as_datatype()) as usize;
-            println!("Received {} bytes", bytes);
-            // let data = ;
             if bytes == 1 && receive_buffer[0] == 42 {
                 panic!("Got done from node {} when expecting a result", node);
             }

@@ -23,6 +23,11 @@ RAM_PER_CPU=$(expr $(expr $RAM_PER_TASK) / 4)
 # filename=$(mktemp)
 filename=$(mktemp kickoff.XXX --tmpdir)
 
+ALGORITHM="glidesort"
+if test "$NUM_TASKS" -gt 1; then
+    ALGORITHM="mpi-distributed-radix-sort"
+fi
+
 ScratchDir=$(mktemp -d) # create a name for the directory
 rm -rf ${ScratchDir}
 mkdir -p ${ScratchDir} # make the directory
@@ -42,7 +47,7 @@ min() {
 for LOCAL_RUN in $(seq 0 3); do
     # echo "Running openmp ($NUM_THREADS threads) on a ${MATRIX_SIZE}x${MATRIX_SIZE} matrix"
     echo -ne $NAME,$RUN_ID,$LOCAL_RUN,$NUM_NODES,$NUM_TASKS_PER_NODE,$NUM_TASKS,$ENTRIES,$TOTAL_RAM,$RAM_PER_TASK, >>$filename
-    srun --nodes=$NUM_NODES --ntasks=$NUM_TASKS --ntasks-per-node=$NUM_TASKS_PER_NODE --cpus-per-task=$NUM_THREADS --mem-per-cpu=$(min ${RAM_PER_CPU} 1000)M --threads-per-core=1 -- $ScratchDir/rust-sorting --algorithm mpi-distributed-radix-sort ${ScratchDir}/$NAME /tmp | grep -v "Start Singularity" >>$filename
+    srun --nodes=$NUM_NODES --ntasks=$NUM_TASKS --ntasks-per-node=$NUM_TASKS_PER_NODE --cpus-per-task=$NUM_THREADS --mem-per-cpu=$(min ${RAM_PER_CPU} 1000)M --threads-per-core=1 -- $ScratchDir/rust-sorting --algorithm "$ALGORITHM" ${ScratchDir}/$NAME /tmp | grep -v "Start Singularity" >>$filename
     echo "" >>$filename
 done
 

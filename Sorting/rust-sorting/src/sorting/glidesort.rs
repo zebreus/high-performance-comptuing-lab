@@ -47,10 +47,12 @@ pub fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
 
     let data = entries_to_u8_unsafe(input);
     let output_file_path = output_directory.join("output.sorted");
+    eprintln!("Writing to {:?}", output_file_path);
     // let mut output_file = std::fs::File::create(&output_file_path).unwrap();
     let mut output_file = std::fs::OpenOptions::new()
         .write(true)
         .append(false)
+        .create(true)
         .truncate(true)
         .open(&output_file_path)
         .unwrap();

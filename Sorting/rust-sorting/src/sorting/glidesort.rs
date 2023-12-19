@@ -1,5 +1,5 @@
 use std::{
-    io::{BufWriter, Write},
+    io::Write,
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
@@ -10,14 +10,14 @@ use crate::entry::{entries_to_u8_unsafe, u8_to_entries_unsafe};
 
 pub fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
     let mut time_spend_reading_the_input = Duration::new(0, 0);
-    let mut time_spend_dividing_the_input_into_buckets = Duration::new(0, 0);
-    let mut time_spend_sending_to_workers = Duration::new(0, 0);
-    let mut time_spend_receiving_on_worker = Duration::new(0, 0);
+    let time_spend_dividing_the_input_into_buckets = Duration::new(0, 0);
+    let time_spend_sending_to_workers = Duration::new(0, 0);
+    let time_spend_receiving_on_worker = Duration::new(0, 0);
     let mut time_spend_sorting_on_worker = Duration::new(0, 0);
     let mut time_spend_writing_to_disk = Duration::new(0, 0);
-    let mut time_spend_receiving_from_workers = Duration::new(0, 0);
-    let mut time_spend_sending_to_manager = Duration::new(0, 0);
-    let mut time_spend_fetching_time_from_workers = Duration::new(0, 0);
+    let time_spend_receiving_from_workers = Duration::new(0, 0);
+    let time_spend_sending_to_manager = Duration::new(0, 0);
+    let time_spend_fetching_time_from_workers = Duration::new(0, 0);
 
     let before_start = Instant::now();
 
@@ -34,35 +34,15 @@ pub fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
         .with_parallel(false)
         .sort();
 
-    // let temp = &input[0..10];
-    // let debug_buffers = &temp
-    //     .into_iter()
-    //     .map(|entry| entry.key())
-    //     .collect::<Vec<_>>();
-    // Check if we are done
-
     time_spend_sorting_on_worker += before_sort.elapsed();
 
     let before_write = Instant::now();
 
     let data = entries_to_u8_unsafe(input);
-    let output_file_path = output_directory.join("output.sorted");
-    eprintln!("Writing to {:?}", output_file_path);
-    // let mut output_file = std::fs::File::create(&output_file_path).unwrap();
-    let mut output_file = std::fs::OpenOptions::new()
-        .write(true)
-        .append(false)
-        .create(true)
-        .truncate(true)
-        .open(&output_file_path)
-        .unwrap();
-    // let mut writer = BufWriter::new(output_file);
-    output_file.write_all(&data).unwrap();
-    // output_file.sync_all().unwrap();
 
-    // writer.flush().unwrap();
-    // writer.into_inner().unwrap().sync_all().unwrap();
-    // output_file.sync_all().unwrap();
+    let output_file_path = output_directory.join("output.sorted");
+    let mut output_file = std::fs::File::create(&output_file_path).unwrap();
+    output_file.write_all(&data).unwrap();
 
     time_spend_writing_to_disk += before_write.elapsed();
 

@@ -1,8 +1,9 @@
 use std::{cmp::Ordering, collections::BinaryHeap};
 
 use arr_macro::arr;
-use itertools::Itertools;
-use rdst::{RadixKey, RadixSort};
+use rdst::RadixKey;
+
+use crate::sorting::BLOCK_SIZE;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -82,6 +83,32 @@ pub fn u8_to_entries_unsafe(mut vec8: Vec<u8>) -> Vec<Entry> {
     };
 
     return vec_entry;
+}
+
+// // Convert a byte slice ref into a entry slice ref without copying
+// // This is safe, because the memory layout of Entry is the same as [u8; 100]
+// #[inline]
+// pub fn u8_to_entries(mut bytes: &[u8]) -> &[Entry] {
+//     unsafe {
+//         let length = bytes.len();
+//         assert!(length % 100 == 0);
+//         core::slice::from_raw_parts(bytes.as_ptr() as *const Entry, length / 100)
+//     }
+// }
+
+// Convert a byte slice ref into a entry slice ref without copying
+// This is safe, because the memory layout of Entry is the same as [u8; 100]
+#[inline]
+pub fn boxed_u8_to_entries(bytes: Box<[u8]>, length: usize) -> Vec<Entry> {
+    unsafe {
+        let capacity = bytes.len();
+        assert!(length % 100 == 0);
+        assert!(capacity >= length);
+
+        let pointer = (*Box::into_raw(bytes)).as_mut_ptr() as *mut Entry;
+
+        Vec::from_raw_parts(pointer, length / 100, capacity / 100)
+    }
 }
 
 pub fn entries_to_u8_unsafe(mut vec_entry: Vec<Entry>) -> Vec<u8> {
@@ -174,19 +201,13 @@ pub fn radix_divide<'a, Iter: Iterator<Item = &'a Entry>>(
     }
 }
 
-pub struct RadixDivider<const BLOCK_SIZE: usize>
-where
-    [Entry; 256 * 2 * BLOCK_SIZE]:,
-{
+pub struct RadixDivider {
     buffers: Box<[Entry; 256 * 2 * BLOCK_SIZE]>,
     positions: [usize; 256],
     // buffer_slices: [&'static mut [Entry; 2 * BLOCK_SIZE]; 256],
 }
 
-impl<const BLOCK_SIZE: usize> RadixDivider<BLOCK_SIZE>
-where
-    [Entry; 256 * 2 * BLOCK_SIZE]:,
-{
+impl RadixDivider {
     pub fn new() -> Self {
         let mut positions = [0; 256];
         for i in 0..256 {
@@ -194,7 +215,8 @@ where
         }
 
         RadixDivider {
-            buffers: Box::new([Entry::default(); 256 * 2 * BLOCK_SIZE]),
+            // buffers: vec![Entry::default(); 256 * 2 * BLOCK_SIZE].into_boxed_slice(),
+            buffers: unsafe { Box::new_zeroed().assume_init() },
             positions,
         }
     }
@@ -223,6 +245,29 @@ where
             result.push((index, sl));
         }
         result
+    }
+
+    /// Borrows all buckets
+    pub fn borrow_delegateable_buffers(&mut self) -> Vec<(usize, &[u8])> {
+        let result = self
+            .buffers
+            .chunks_exact(2 * BLOCK_SIZE)
+            .enumerate()
+            .map(|(index, buffer)| {
+                let end = self.positions[index];
+                let start = 2 * BLOCK_SIZE * index;
+                let length = end - start;
+                let buffer = &buffer[0..length];
+                let u8buffer = unsafe {
+                    core::slice::from_raw_parts(buffer.as_ptr() as *const u8, length * 100)
+                };
+                (index, u8buffer)
+            })
+            .collect::<Vec<_>>();
+        for i in 0..256 {
+            self.positions[i] = i * BLOCK_SIZE * 2;
+        }
+        return result;
     }
 
     /// Check if all buckets are filled with more than BLOCK_SIZE elements
@@ -311,6 +356,20 @@ impl SortedEntries {
     }
 
     pub fn join(&mut self, mut other: Vec<Entry>) {
+        other.sort_unstable();
+        self.others.push(other);
+
+        // let entries = self.entries;
+        // TODO: Make this more efficient, as it copies every time, maybe use a list
+        let main_length = self.entries.len();
+        let other_length: usize = self.others.iter().map(|vec| vec.len()).sum();
+
+        if (GROWTH_FACTOR * other_length) > main_length {
+            self.actually_join();
+        }
+    }
+
+    pub fn join_slice(&mut self, mut other: Vec<Entry>) {
         other.sort_unstable();
         self.others.push(other);
 

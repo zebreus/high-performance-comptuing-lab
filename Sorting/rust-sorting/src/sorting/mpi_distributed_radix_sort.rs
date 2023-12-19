@@ -3,35 +3,26 @@ use std::{
     io::{BufWriter, Write},
     os::fd::AsRawFd,
     path::{Path, PathBuf},
-    rc::Rc,
     sync::Arc,
     time::{Duration, Instant},
 };
 
-use futures::future::join_all;
 use mpi::{request::WaitGuard, Rank};
 use mpi::{topology::SimpleCommunicator, traits::*};
 use nix::libc::{posix_fadvise64, POSIX_FADV_NOREUSE, POSIX_FADV_SEQUENTIAL, POSIX_FADV_WILLNEED};
-use tokio::io::AsyncWriteExt;
-use tokio::{
-    io::AsyncReadExt,
-    runtime::{Handle, Runtime},
-    spawn,
-    sync::Mutex,
-    task::spawn_blocking,
-}; // for write_all()
+use tokio::{io::AsyncReadExt, runtime::Handle, spawn, sync::Mutex, task::spawn_blocking}; // for write_all()
 
 use crate::entry::{
     entries_to_u8_unsafe, u8_to_entries_unsafe, Entry, RadixDivider, SortedEntries,
 };
 
 /// Size of the blocks of entries that will be transmitted to one worker in one go. In entries/ 100bytes
-const BLOCK_SIZE: usize = 10000; // 10000 Entries = 1 MB
+pub const BLOCK_SIZE: usize = 10000; // 10000 Entries = 1 MB
 /// Size of datablocks that will be read from disk. In bytes
-const READ_BLOCK_SIZE: usize = 256 * 100 * 100;
+pub const READ_BLOCK_SIZE: usize = 256 * 100 * 100;
 /// Minimum size read before starting to sort. In bytes
 /// Has to be smaller than READ_BLOCK_SIZE
-const MIN_READ_BLOCK_SIZE: usize = 0;
+pub const MIN_READ_BLOCK_SIZE: usize = 0;
 
 // Manager uses 2*READ_BLOCK_SIZE + 256*4*100*BLOCK_SIZE bytes of memory
 // The workers use the (TOTAL_DATA_SIZE/NUMBER_OF_WORKERS)*2 bytes of memory
@@ -102,7 +93,7 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
                 assert_eq!(fadvise_result, 0);
             };
 
-            let mut radix_divider = RadixDivider::<BLOCK_SIZE>::new();
+            let mut radix_divider = RadixDivider::new();
 
             let reader = Arc::new(Mutex::new((0, file)));
             let work_box: Arc<Mutex<Box<[u8; READ_BLOCK_SIZE]>>> =
@@ -112,7 +103,7 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
             let mut work_buffer_end: usize = 0;
 
             let mut send_task: Option<tokio::task::JoinHandle<()>> = Option::None;
-            let mut send_tasks: Vec<tokio::task::JoinHandle<()>> = Vec::new();
+            // let mut send_tasks: Vec<tokio::task::JoinHandle<()>> = Vec::new();
 
             let mut read_task: Option<tokio::task::JoinHandle<usize>> = Option::None;
 
@@ -337,7 +328,7 @@ pub async fn sort(input_file: &Path, output_directory: &Path) -> Vec<PathBuf> {
     }
 
     if rank != 0 {
-        let mut buffers: [Option<SortedEntries>; 256] = arr_macro::arr![None; 256];
+        // let mut buffers: [Option<SortedEntries>; 256] = arr_macro::arr![None; 256];
 
         // Solution one: Completly synchronous
         // loop {

@@ -1,6 +1,9 @@
 #![feature(array_chunks)]
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
+#![feature(read_buf)]
+#![feature(core_io_borrowed_buf)]
+#![feature(new_uninit)]
 pub mod entry;
 mod sorting;
 
@@ -37,23 +40,16 @@ struct Cli {
 async fn main() {
     let cli = Cli::parse();
 
-    // Put the correct number of threads into rayons global thread pool
-    // rayon::ThreadPoolBuilder::new()
-    //     .num_threads(cli.threads.unwrap_or(1))
-    //     .build_global()
-    //     .unwrap();
-
     let algorithm = cli.algorithm;
 
     let mpi_version = mpi::environment::library_version();
     let mpi_universe = if mpi_version.is_ok() {
-        // mpi::initialize();
         mpi::initialize_with_threading(mpi::Threading::Single)
     } else {
         None
     };
 
-    let rank = mpi_universe.map_or(0, |o| o.0.world().rank());
+    let rank = mpi_universe.as_ref().map_or(0, |o| o.0.world().rank());
 
     let input_file_exists = cli.input.is_file();
     if rank == 0 && !input_file_exists {
@@ -105,5 +101,5 @@ async fn main() {
     if rank == 0 {
         println!("{}", sort_duration.as_secs_f64());
     }
-    // eprintln!("Output files: {:?}", output_files);
+    // let _ = mpi_universe.as_ref().map_or(0, |o| o.0.world().rank());
 }

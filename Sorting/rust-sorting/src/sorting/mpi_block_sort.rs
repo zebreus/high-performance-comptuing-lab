@@ -7,7 +7,6 @@ use std::{
 
 use mpi::traits::*;
 use mpi::Rank;
-use rdst::RadixSort;
 
 use crate::entry::{entries_to_u8_unsafe, u8_to_entries_unsafe, Entry, SortedEntries};
 

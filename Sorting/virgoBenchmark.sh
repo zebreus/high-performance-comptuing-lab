@@ -143,7 +143,7 @@ run-benchmark() {
 
     JOBNAME="sorting-$NUM_NODES-$NUM_TASKS_PER_NODE-${RAM_PER_TASK}G-$RUN_ID"
 
-    sbatch --partition=main --job-name=$JOBNAME --nodes=${NUM_NODES} --ntasks-per-node=${NUM_TASKS_PER_NODE} --cpus-per-task=4 --mem-per-cpu=$(min $(expr $RAM_PER_CPU \* 2) 1000)M --threads-per-core=1 --output=${WORK_DIR}/%j.out --error=${WORK_DIR}/%j.err -- ./runTenTimes.sh $NUM_NODES $NUM_TASKS_PER_NODE $ENTRIES $TOTAL_RAM $IN_FILE $OUT_FILE $RUN_ID $EXECUTABLE
+    sbatch --partition=main --job-name=$JOBNAME --nodes=${NUM_NODES} --ntasks-per-node=${NUM_TASKS_PER_NODE} --cpus-per-task=4 --mem-per-cpu=$(min $(expr $RAM_PER_CPU) 1000)M --threads-per-core=1 --output=${WORK_DIR}/%j.out --error=${WORK_DIR}/%j.err -- ./runTenTimes.sh $NUM_NODES $NUM_TASKS_PER_NODE $ENTRIES $TOTAL_RAM $IN_FILE $OUT_FILE $RUN_ID $EXECUTABLE
 }
 
 # run-benchmark 4 4 1000 $output_filename 1 $WORK_DIR/rust-sorting
@@ -153,7 +153,7 @@ run-benchmark() {
 # for ENTRIES in 1000000 16000000; do
 
 for ITERATION in 1 2 3 4; do
-    for NODES in 2 4 8 16 32; do
+    for NODES in 1; do
         for ENTRIES in 100 1000 1000000 16000000 64000000 256000000 1000000000; do
             RUNN=$((RUN++))
             echo RUN: $RUNN

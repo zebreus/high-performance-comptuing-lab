@@ -37,7 +37,6 @@ cp $EXECUTABLE ${ScratchDir}
 srun --nodes $NUM_NODES --ntasks-per-node=$NUM_TASKS_PER_NODE --cpus-per-task=1 -- mkdir -p ${ScratchDir}
 srun --nodes $NUM_NODES --ntasks-per-node=$NUM_TASKS_PER_NODE --cpus-per-task=1 -- cp $EXECUTABLE ${ScratchDir}
 
-cp $IN_FILE ${ScratchDir}
 NAME=$(basename $IN_FILE)
 
 min() {
@@ -47,7 +46,7 @@ min() {
 for LOCAL_RUN in $(seq 0 3); do
     # echo "Running openmp ($NUM_THREADS threads) on a ${MATRIX_SIZE}x${MATRIX_SIZE} matrix"
     echo -ne $NAME,$RUN_ID,$LOCAL_RUN,$NUM_NODES,$NUM_TASKS_PER_NODE,$NUM_TASKS,$ENTRIES,$TOTAL_RAM,$RAM_PER_TASK, >>$filename
-    srun --nodes=$NUM_NODES --ntasks=$NUM_TASKS --ntasks-per-node=$NUM_TASKS_PER_NODE --cpus-per-task=$NUM_THREADS --mem-per-cpu=$(min ${RAM_PER_CPU} 1000)M --threads-per-core=1 -- $ScratchDir/rust-sorting --algorithm "$ALGORITHM" ${ScratchDir}/$NAME /tmp | grep -v "Start Singularity" >>$filename
+    srun --nodes=$NUM_NODES --ntasks=$NUM_TASKS --ntasks-per-node=$NUM_TASKS_PER_NODE --cpus-per-task=$NUM_THREADS --mem-per-cpu=$(min ${RAM_PER_CPU} 1000)M --threads-per-core=1 -- $ScratchDir/rust-sorting --work-directory ${ScratchDir} --algorithm "$ALGORITHM" ${ScratchDir}/$NAME /tmp | grep -v "Start Singularity" >>$filename
     echo "" >>$filename
 done
 

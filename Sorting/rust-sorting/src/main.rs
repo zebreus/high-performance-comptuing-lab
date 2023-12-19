@@ -4,10 +4,11 @@
 pub mod entry;
 mod sorting;
 
-use std::{path::PathBuf, time::Instant};
+use std::{path::PathBuf, process::exit, time::Instant};
 
 use clap::Parser;
 use mpi::traits::*;
+use nix::NixPath;
 use sorting::SortImplementation;
 
 #[derive(Parser)]
@@ -75,13 +76,19 @@ async fn main() {
         PathBuf::new()
     };
 
+    if cli.output_directory.len() == 0 {
+        eprintln!("Output directory is length zero");
+        exit(1);
+    }
+    if cli.output_directory.is_file() {
+        eprintln!("Output directory is a file");
+        exit(1);
+    }
+
     let output_is_directory = cli.output_directory.is_dir();
-    if rank == 0 && !output_is_directory {
-        eprintln!(
-            "Output directory {:?} does not exist or is not a directory",
-            cli.output_directory
-        );
-        std::process::exit(1);
+    if !output_is_directory {
+        eprintln!("Creating output directory {:?}", cli.output_directory);
+        std::fs::create_dir_all(&cli.output_directory).unwrap();
     }
 
     // let setup_duration = before_setup.elapsed();

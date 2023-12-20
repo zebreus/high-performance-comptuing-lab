@@ -161,9 +161,39 @@ include::scripts/vega-chart.adoc[]
 :vega-lite-filename: processed-assets/sorting-non-distributed-performance-per-step.vl.json
 include::scripts/vega-chart.adoc[]
 
+.Relative step comparison of the non-distributed implementations
+:chart-id: id=non-distributed-performance-percentage
+:vega-lite-filename: processed-assets/sorting-non-distributed-performance-percentage.vl.json
+include::scripts/vega-chart.adoc[]
+
 We will use the `sort-unstable` implementation as a baseline for the distributed implementations, because it is faster and has a more predictable runtime.
 
 === Distributed performance
+
+<<mpi-single-performance-one-node-speedup>> shows the relative speedup of the distributed implementation with different numbers of tasks compared to `sort-unstable`. Each line represents a implementation running with a given number of ranks. Every rank runs on the same machine.
+
+.Speedup compared to non-distributed sorting
+:chart-id: id=mpi-single-performance-one-node-speedup
+:vega-lite-filename: processed-assets/sorting-mpi-single-performance-one-node-speedup.vl.json
+include::scripts/vega-chart.adoc[]
+
+.Efficiency compared to non-distributed sorting
+:chart-id: id=mpi-single-performance-one-node-efficiency
+:vega-lite-filename: processed-assets/sorting-mpi-single-performance-one-node-efficiency.vl.json
+include::scripts/vega-chart.adoc[]
+
+It shows that the distributed implementation is slower than the non-distributed implementation for small problems (n <= 2^20 entries). The best relative speedup is achieved for problems with a size of 2^24 , after that the relative speedup gets lower again.
+
+When only two tasks are used, there is no speedup. With 2^24 entries the speedup is exactly 1, which means that the distributed implementation is as fast as the non-distributed implementation. I would have expected it to be lower, as we only have one worker that is actually sorting in that case. The advantage we get by bucketing the data and only sorting small chunks, seems to be equal to the overhead of distributing it into buckets and sending the data over the network.
+// Wrong... It is only half that..
+
+When using 4 or 8 tasks the speedup is 2 for 2^24 entries. For 16, 32, and 64 tasks the speedup is 3 for 2^24 entries. It looks like the maximum speedup is achieved when using 16 tasks, after that we get diminishing returns.
+
+
+.Duration of each step when sorting 16M numbers
+:chart-id: id=one-node-16M-steps
+:vega-lite-filename: processed-assets/sorting-one-node-16M-steps.vl.json
+include::scripts/vega-chart.adoc[]
 
 
 === Learnings

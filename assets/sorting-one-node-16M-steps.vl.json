@@ -1,0 +1,118 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Duration of each step in sorting 16M numbers",
+  "config": {
+    "font": "Spectral, sans-serif"
+  },
+  "data": {
+    "url": "./sorting-one-node-16M-steps.csv"
+  },
+
+  "resolve": {
+    "scale": {
+      "x": "shared",
+      "y": "shared"
+    },
+    "axis": {
+      "x": "shared",
+      "y": "shared"
+    }
+  },
+  "hconcat": [ {
+      "title": "Manager",
+      "transform": [
+        { "fold": [ "Reading input file",
+            "Dividing data into buckets",
+            "Sending to workers",
+            "Receiving from workers",
+            "Writing output file" ],
+          "as": [
+            "manager-key",
+            "manager-value"
+          ] }
+      ],
+      "encoding": {
+        "x": {
+          "field": "tasks",
+          "type": "quantitative",
+          "scale": {
+            "type": "log",
+            "base": 2,
+            "nice": true
+          },
+          "title": "Number of tasks"
+        },
+        "color": {
+          "field": "manager-key",
+          "title": "Step",
+          "type": "nominal",
+          "sort": null,
+          "scale": {
+            "scheme": "tableau10"
+          }
+
+        },
+        "y": {
+          "field": "manager-value",
+          "title": "Duration (seconds)",
+          "type": "quantitative",
+          "aggregate": "average",
+          "stack": "zero",
+          "scale": {
+            "domain": [ 0, 7 ]
+          }
+        }
+      },
+      "layer": [
+        {
+          "mark": { "type": "area", "tooltip": true }
+        }
+      ]
+    },
+    {
+      "title": "Worker",
+
+      "transform": [
+        { "fold": [ "Receiving from manager",
+            "Sorting buckets",
+            "Sending to manager" ],
+          "as": [
+            "worker-key",
+            "worker-value"
+          ] }
+      ],
+      "encoding": {
+        "x": {
+          "field": "tasks",
+          "type": "quantitative",
+          "scale": {
+            "type": "log",
+            "base": 2,
+            "nice": true
+          },
+          "title": "Number of tasks"
+        },
+        "color": {
+          "field": "worker-key",
+          "title": "Step",
+          "type": "nominal",
+          "sort": null
+        },
+        "y": {
+          "field": "worker-value",
+          "title": "Duration (seconds)",
+          "type": "quantitative",
+          "aggregate": "average",
+          "stack": "zero",
+          "scale": {
+            "domain": [ 0, 7 ]
+          }
+        }
+      },
+      "layer": [
+        {
+          "mark": { "type": "area", "tooltip": true }
+        }
+      ]
+    } ]
+}

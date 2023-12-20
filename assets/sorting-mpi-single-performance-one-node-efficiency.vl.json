@@ -1,0 +1,114 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Efficiency compared to non-distributed sorting",
+  "config": {
+    "font": "Spectral, sans-serif",
+    "fieldTitle": "plain"
+  },
+  "data": {
+    "url": "./sorting-mpi-single-performance-one-node.csv"
+  },
+  "transform": [
+    {
+      "joinaggregate": [
+        { "op": "mean", "field": "duration", "as": "meanDuration" }
+      ],
+
+      "groupby": [ "name", "entries" ]
+    },
+    {
+      "sort": [ { "field": "name", "order": "descending" } ],
+      "window": [
+        { "op": "first_value", "as": "firstDuration", "field": "meanDuration" }
+      ],
+      "groupby": [ "entries" ]
+    },
+    {
+      "calculate": "datum['firstDuration'] / datum['meanDuration']",
+      "as": "Relative Speedup"
+    },
+    {
+      "calculate": "datum['firstDuration'] / datum['meanDuration'] / datum['tasks']",
+      "as": "Relative Efficiency"
+    }
+  ],
+
+  "resolve": {
+    "axis": {
+      "y": "shared"
+    }
+  },
+
+  "hconcat": [
+    {
+      "title": "Logarithmic Y Axis",
+      "encoding": {
+        "x": {
+          "field": "entries",
+          "type": "quantitative",
+          "scale": {
+            "type": "log",
+            "base": 2,
+            "nice": true
+          },
+          "title": "Number of entries",
+          "axis": {
+            "labelExpr": "'₂' + (log(datum.value) / log(2))",
+            "labelAngle": 45
+          }
+        },
+        "color": {
+          "field": "tasks",
+          "title": "Ranks",
+          "type": "quantitative",
+          "scale": { "scheme": "turbo", "type": "log", "base": 2, "nice": true }
+        },
+        "y": {
+          "field": "Relative Efficiency",
+          "type": "quantitative",
+          "aggregate": "mean",
+          "scale": {
+            "type": "log",
+            "base": 2,
+            "nice": true
+          },
+          "axis": {
+            "labelExpr": "if(datum.value > 0.1, datum.value ,'₂' + (log(datum.value) / log(2)))"
+          }
+        }
+      },
+      "mark": { "type": "line", "tooltip": true, "point": true }
+    },
+    {
+      "title": "Absolute Y Axis",
+      "encoding": {
+        "x": {
+          "field": "entries",
+          "type": "quantitative",
+          "scale": {
+            "type": "log",
+            "base": 2,
+            "nice": true
+          },
+          "title": "Number of entries",
+          "axis": {
+            "labelExpr": "'₂' + (log(datum.value) / log(2))",
+            "labelAngle": 45
+          }
+        },
+        "color": {
+          "field": "tasks",
+          "title": "Ranks",
+          "type": "quantitative",
+          "scale": { "scheme": "turbo", "type": "log", "base": 2, "nice": true }
+        },
+        "y": {
+          "field": "Relative Efficiency",
+          "type": "quantitative",
+          "aggregate": "mean"
+        }
+      },
+      "mark": { "type": "line", "tooltip": true, "point": true }
+    }
+  ]
+}

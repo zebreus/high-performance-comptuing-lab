@@ -1,0 +1,60 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Non-distributed sorting: Total duration",
+  "config": {
+    "font": "Spectral, sans-serif"
+  },
+  "autosize": "fit",
+  "width": 500,
+  "height": 300,
+  "data": {
+    "url": "./sorting-non-distributed-performance.csv"
+  },
+
+  "encoding": {
+    "x": {
+      "field": "entries",
+      "type": "quantitative",
+      "scale": {
+        "type": "log",
+        "base": 2,
+        "nice": true
+      },
+      "title": "Number of entries",
+      "axis": {
+        "labelExpr": "'₂' + (log(datum.value) / log(2))",
+        "labelAngle": 45
+      }
+
+    },
+    "color": {
+      "field": "implementation",
+      "title": "Implementation",
+      "type": "nominal"
+    },
+    "y": {
+      "field": "duration",
+      "type": "quantitative",
+      "title": "Duration (seconds)",
+      "scale": {
+        "type": "log",
+        "base": 2,
+        "nice": true
+      }
+    }
+  },
+  "layer": [
+    {
+      "mark": { "type": "line", "tooltip": true, "point": "transparent" },
+      "encoding": {
+        "y": {
+          "field": "duration",
+          "aggregate": "mean"
+        }
+      }
+    },
+    {
+      "mark": { "type": "point" }
+    }
+  ]
+}

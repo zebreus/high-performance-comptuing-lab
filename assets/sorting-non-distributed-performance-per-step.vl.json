@@ -1,0 +1,70 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Non-distributed sorting: Duration for each step",
+  "config": {
+    "font": "Spectral, sans-serif"
+  },
+  "data": {
+    "url": "./sorting-non-distributed-performance.csv"
+  },
+  "transform": [
+    { "fold": [ "reading_the_input", "writing_to_disk", "sorting_on_worker" ] }
+  ],
+  "facet": {
+    "field": "key",
+    "type": "nominal",
+    "title": null
+  },
+  "columns": 2,
+  "resolve": {
+    "scale": {
+      "x": "independent"
+    }
+  },
+  "spec": {
+    "encoding": {
+      "x": {
+        "field": "entries",
+        "type": "quantitative",
+        "scale": {
+          "type": "log",
+          "base": 2,
+          "nice": true
+        },
+        "title": "Number of entries",
+        "axis": {
+          "labelExpr": "'₂' + (log(datum.value) / log(2))",
+          "labelAngle": 45
+        }
+      },
+      "color": {
+        "field": "implementation",
+        "title": "Implementation",
+        "type": "nominal"
+      },
+      "y": {
+        "field": "value",
+        "title": "Duration (seconds)",
+        "scale": {
+          "type": "log",
+          "base": 2,
+          "nice": true
+        }
+      }
+    },
+    "layer": [
+      {
+        "mark": { "type": "line", "tooltip": true, "point": "transparent" },
+        "encoding": {
+          "y": {
+            "field": "value",
+            "aggregate": "mean"
+          }
+        }
+      },
+      {
+        "mark": { "type": "point" }
+      }
+    ]
+  }
+}

@@ -134,10 +134,37 @@ worker = firstByte % numberOfWorkers]->
 [<end> client]
 ....
 
-=== Performance
+=== Measurements
 
-We did not have time to measure performance at the Virgo cluster. We did measure the performance on our local machines. We used a 10GB file with generated with gensort. The single node implemetation is the non-mpi implementation. The measurements for more than one node are the MPI implementation.
-<<sorting-data>> show that our MPI implementation is always slower than the single threaded implementation. This is probably due to the overhead of sending the data over the network. We could probably optimize our implementation to be better, but we did not have time to do so.
+// We did not have time to measure performance at the Virgo cluster. We did measure the performance on our local machines. We used a 10GB file with generated with gensort. The single node implemetation is the non-mpi implementation. The measurements for more than one node are the MPI implementation.
+// <<sorting-data>> show that our MPI implementation is always slower than the single threaded implementation. This is probably due to the overhead of sending the data over the network. We could probably optimize our implementation to be better, but we did not have time to do so.
+
+We measured performance for datasets sized between 2^10 to 2^22 bytes on the Virgo cluster. These datasets were sorted by 4 algorithms:
+`radix-sort`:: A single threaded radix sort implementation.
+`unstable_sort`:: The rust standard librarys `sort_unstable()` https://doc.rust-lang.org/std/primitive.slice.html#method.sort_unstable function which uses pattern-defeating quicksort. 
+`mpi-single`:: Our MPI implementation with a single thread per node.
+`mpi-multi`:: Our MPI implementation with 2-4 threades per node, so reading, transmitting, sorting, and writing can happen in parallel.
+
+We tested the MPI implementations with 1 to 16 nodes and 1 to 16 tasks per node (but at least 2 tasks). The two non-MPI implementations were tested with one node/one task. First the input file is copied to the `/tmp` directory on the manager node. The sorting algrithm then uses that file as input to avoid lustre bottlenecks. The output file is also written to the `/tmp` directory on the manager node. The measurement does not include coping the input file to the `/tmp` directory or copying the output file from the `/tmp` directory. The measurement does include reading and writing of the files from the `/tmp` directory. All measurements were made from inside our application. We also measured individual times for reading, transmitting, sorting, and writing to indentify bottlenecks. We tried to measure each implementation for each applicable combination of nodes and tasks per node 16 times. We bundled four measurements for the same configuration into one slurm batch.  In reality we got fewer measurements, as they sometimes fail. 
+
+=== Non distributed performance
+
+We want to select a non-distributed implementation to use as a baseline when comparing the distributed implementations. <<non-distributed-performance-total>> shows the total runtime of the two tested non-distributed implementations for different dataset sizes. It shows that the `sort-unstable` implementation is faster than the `radix-sort` implementation for smaller datasets. It's measurements are also more predictable, as the curve does not have a weird bump at 2^18 bytes. <<non-distributed-performance-per-step>> shows that the bump is probably not a measurement error, as the difference is in the sorting step and not while reading the input or writing the result.
+
+.Total runtime comparison of the non-distributed implementations
+:chart-id: id=non-distributed-performance-total
+:vega-lite-filename: processed-assets/sorting-non-distributed-performance-total.vl.json
+include::scripts/vega-chart.adoc[]
+
+.Runtime breakdown comparison of the non-distributed implementations
+:chart-id: id=non-distributed-performance-per-step
+:vega-lite-filename: processed-assets/sorting-non-distributed-performance-per-step.vl.json
+include::scripts/vega-chart.adoc[]
+
+We will use the `sort-unstable` implementation as a baseline for the distributed implementations, because it is faster and has a more predictable runtime.
+
+=== Distributed performance
+
 
 === Learnings
 

@@ -120,39 +120,39 @@ get-timeouts-from-entries() {
         ;;
 
     16384)
-        echo -n "0-00:05:00"
+        echo -n "0-00:10:00"
         ;;
 
     65536)
-        echo -n "0-00:05:00"
+        echo -n "0-00:10:00"
         ;;
 
     262144)
-        echo -n "0-00:05:00"
+        echo -n "0-00:10:00"
         ;;
 
     1048576)
-        echo -n "0-00:10:00"
-        ;;
-
-    4194304)
-        echo -n "0-00:10:00"
-        ;;
-
-    16777216)
-        echo -n "0-00:10:00"
-        ;;
-
-    67108864)
         echo -n "0-00:20:00"
         ;;
 
-    268435456)
+    4194304)
+        echo -n "0-00:20:00"
+        ;;
+
+    16777216)
+        echo -n "0-00:20:00"
+        ;;
+
+    67108864)
         echo -n "0-01:00:00"
         ;;
 
-    1073741824)
+    268435456)
         echo -n "0-01:30:00"
+        ;;
+
+    1073741824)
+        echo -n "0-03:30:00"
         ;;
 
     *)
@@ -224,19 +224,19 @@ run-benchmark() {
         ;;
     esac
 
-    SUFFIX="-$(expr $RUN_ID % 4)"
-    case $ENTRIES in
-    1073741824)
-        SUFFIX="-$(expr $RUN_ID % 16)"
-        ;;
-    268435456)
-        TOTAL_RAM=$(get-multi-requirements $ENTRIES $NUM_TASKS)
-        SUFFIX="-$(expr $RUN_ID % 8)"
-        ;;
-    *)
-        SUFFIX="-$(expr $RUN_ID % 4)"
-        ;;
-    esac
+    SUFFIX="-$(expr $RUN_ID % 8)"
+    # case $ENTRIES in
+    # 1073741824)
+    #     SUFFIX="-$(expr $RUN_ID % 16)"
+    #     ;;
+    # 268435456)
+    #     TOTAL_RAM=$(get-multi-requirements $ENTRIES $NUM_TASKS)
+    #     SUFFIX="-$(expr $RUN_ID % 8)"
+    #     ;;
+    # *)
+    #     SUFFIX="-$(expr $RUN_ID % 4)"
+    #     ;;
+    # esac
 
     RAM_PER_TASK=$(expr $TOTAL_RAM / $NUM_TASKS)
     RAM_PER_CPU=$(expr $(expr $RAM_PER_TASK) / $NUM_CPUS)
@@ -289,90 +289,90 @@ for ITERATION in $(seq 1 4); do
             run-benchmark $NODES 128 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
         done
     done
-    for NODES in 2 4; do
-        for ENTRIES in "${sizes[@]}"; do
-            RUNN=$((RUN++))
-            run-benchmark $NODES 1 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
-            RUNN=$((RUN++))
-            run-benchmark $NODES 2 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
-            RUNN=$((RUN++))
-            run-benchmark $NODES 4 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
-            RUNN=$((RUN++))
-            run-benchmark $NODES 8 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
-            RUNN=$((RUN++))
-            run-benchmark $NODES 16 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
-            RUNN=$((RUN++))
-            run-benchmark $NODES 32 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
-            RUNN=$((RUN++))
-            run-benchmark $NODES 1 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
-            RUNN=$((RUN++))
-            run-benchmark $NODES 2 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
-            RUNN=$((RUN++))
-            run-benchmark $NODES 4 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
-            RUNN=$((RUN++))
-            run-benchmark $NODES 8 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
-            RUNN=$((RUN++))
-            run-benchmark $NODES 16 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
-            RUNN=$((RUN++))
-            run-benchmark $NODES 32 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
-            RUNN=$((RUN++))
-            run-benchmark $NODES 64 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
-            RUNN=$((RUN++))
-            run-benchmark $NODES 128 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
-        done
-    done
-    for NODES in 8; do
-        for ENTRIES in "${sizes[@]}"; do
-            RUNN=$((RUN++))
-            run-benchmark $NODES 1 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
-            RUNN=$((RUN++))
-            run-benchmark $NODES 2 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
-            RUNN=$((RUN++))
-            run-benchmark $NODES 4 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
-            RUNN=$((RUN++))
-            run-benchmark $NODES 8 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
-            RUNN=$((RUN++))
-            run-benchmark $NODES 16 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
-            RUNN=$((RUN++))
-            run-benchmark $NODES 32 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
-            RUNN=$((RUN++))
-            run-benchmark $NODES 1 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
-            RUNN=$((RUN++))
-            run-benchmark $NODES 2 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
-            RUNN=$((RUN++))
-            run-benchmark $NODES 4 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
-            RUNN=$((RUN++))
-            run-benchmark $NODES 8 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
-            RUNN=$((RUN++))
-            run-benchmark $NODES 16 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
-            RUNN=$((RUN++))
-            run-benchmark $NODES 32 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
-        done
-    done
-    for NODES in 16; do
-        for ENTRIES in "${sizes[@]}"; do
-            RUNN=$((RUN++))
-            run-benchmark $NODES 1 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
-            RUNN=$((RUN++))
-            run-benchmark $NODES 2 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
-            RUNN=$((RUN++))
-            run-benchmark $NODES 4 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
-            RUNN=$((RUN++))
-            run-benchmark $NODES 8 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
-            RUNN=$((RUN++))
-            run-benchmark $NODES 16 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
-            RUNN=$((RUN++))
-            run-benchmark $NODES 1 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
-            RUNN=$((RUN++))
-            run-benchmark $NODES 2 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
-            RUNN=$((RUN++))
-            run-benchmark $NODES 4 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
-            RUNN=$((RUN++))
-            run-benchmark $NODES 8 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
-            RUNN=$((RUN++))
-            run-benchmark $NODES 16 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
-        done
-    done
+    # for NODES in 2 4; do
+    #     for ENTRIES in "${sizes[@]}"; do
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 1 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 2 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 4 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 8 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 16 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 32 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 1 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 2 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 4 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 8 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 16 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 32 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 64 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 128 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
+    #     done
+    # done
+    # for NODES in 8; do
+    #     for ENTRIES in "${sizes[@]}"; do
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 1 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 2 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 4 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 8 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 16 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 32 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 1 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 2 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 4 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 8 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 16 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 32 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
+    #     done
+    # done
+    # for NODES in 16; do
+    #     for ENTRIES in "${sizes[@]}"; do
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 1 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 2 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 4 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 8 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 16 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting multi
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 1 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 2 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 4 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 8 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
+    #         RUNN=$((RUN++))
+    #         run-benchmark $NODES 16 $ENTRIES $output_filename $RUNN $WORK_DIR/rust-sorting single
+    #     done
+    # done
     # for NODES in 32; do
     #     for ENTRIES in "${sizes[@]}"; do
     #         RUNN=$((RUN++))

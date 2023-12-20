@@ -33,11 +33,65 @@ srun --nodes $NUM_NODES --ntasks-per-node=$NUM_TASKS_PER_NODE --cpus-per-task=1 
 
 NAME=$(basename $IN_FILE)
 
+# get-timeouts-from-entries() {
+#     case $1 in
+
+#     1024)
+#         echo -n "0-00:03:00"
+#         ;;
+
+#     4096)
+#         echo -n "0-00:03:00"
+#         ;;
+
+#     16384)
+#         echo -n "0-00:03:00"
+#         ;;
+
+#     65536)
+#         echo -n "0-00:03:00"
+#         ;;
+
+#     262144)
+#         echo -n "0-00:03:00"
+#         ;;
+
+#     1048576)
+#         echo -n "0-00:03:00"
+#         ;;
+
+#     4194304)
+#         echo -n "0-00:03:00"
+#         ;;
+
+#     16777216)
+#         echo -n "0-00:03:00"
+#         ;;
+
+#     67108864)
+#         echo -n "0-00:05:00"
+#         ;;
+
+#     268435456)
+#         echo -n "0-00:10:00"
+#         ;;
+
+#     1073741824)
+#         echo -n "0-00:20:00"
+#         ;;
+
+#     *)
+#         echo "Unsupported number of entries" >&2
+#         exit 1
+#         ;;
+#     esac
+# }
+
 min() {
     printf "%s\n" "$1" "$2" | sort -nr | head -n1
 }
 
-for LOCAL_RUN in $(seq 0 3); do
+for LOCAL_RUN in $(seq 0 7); do
     case "$MODE" in
     multi)
         # echo "Running openmp ($NUM_THREADS threads) on a ${MATRIX_SIZE}x${MATRIX_SIZE} matrix"

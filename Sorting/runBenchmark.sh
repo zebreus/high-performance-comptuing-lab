@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-#SBATCH -p main
 #SBATCH --threads-per-core=1
 #SBATCH --time=01:30:00          # total run time limit (HH:MM:SS)
 

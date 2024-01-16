@@ -1,0 +1,62 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Sorting on one node",
+  "config": {
+    "font": "Spectral, sans-serif"
+  },
+  "autosize": "fit",
+  "width": 500,
+  "height": 300,
+  "data": {
+    "url": "./sorting-duration-on-one-node.csv"
+  },
+  "transform": [
+    {
+      "calculate": "datum.implementation + datum.tasks",
+      "as": "name-nodes"
+    } ],
+  "encoding": {
+    "x": {
+      "field": "entries",
+      "type": "quantitative",
+      "scale": {
+        "type": "log",
+        "base": 2,
+        "nice": true
+      },
+      "title": "Number of entries",
+      "axis": {
+        "labelExpr": "'₂' + (log(datum.value) / log(2))",
+        "labelAngle": 45
+      }
+
+    },
+    "y": {
+      "field": "duration",
+      "aggregate": "mean",
+      "type": "quantitative",
+      "title": "Duration (seconds)",
+      "scale": {
+        "type": "log",
+        "base": 2,
+        "nice": true
+      }
+    },
+    "color": {
+      "field": "name-nodes",
+      "title": "Implementation",
+      "type": "nominal"
+    }
+  },
+  "layer": [
+    {
+      "mark": { "type": "point" }
+    },
+    {
+      "mark": { "type": "line", "tooltip": true, "point": "transparent" },
+      "encoding": {
+
+      }
+    }
+  ]
+}

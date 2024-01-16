@@ -1,0 +1,70 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Implementation comparison for 64 threads",
+  "config": {
+    "font": "Spectral, sans-serif"
+  },
+  "autosize": "fit",
+  "width": 500,
+  "height": 300,
+  "data": {
+    "url": "./algorithm-comparison-high-threads.csv"
+  },
+  "transform": [
+    {
+      "aggregate": [ { "field": "duration", "op": "mean", "as": "meanDuration" } ],
+      "groupby": [ "threads", "matrix_size" ]
+    },
+    {
+      "sort": [ { "field": "threads", "order": "ascending" } ],
+      "window": [ { "op": "first_value", "as": "firstDuration", "field": "meanDuration" } ],
+      "groupby": [ "matrix_size" ]
+    },
+    {
+      "calculate": "datum['firstDuration'] / datum['meanDuration']",
+      "as": "speedup"
+    },
+    {
+      "calculate": "datum['firstDuration'] / datum['meanDuration'] / datum['threads']",
+      "as": "efficiency"
+    }
+
+  ],
+  "encoding": {
+    "x": {
+      "field": "matrix_size",
+      "type": "quantitative",
+      "sort": null,
+      "scale": {
+        "type": "log",
+        "base": 2,
+        "nice": true
+      },
+
+      "title": "Matrix Size (N*N)"
+    },
+    "y": {
+      "field": "speedup",
+      "type": "quantitative",
+      "title": "Mean duration (seconds)",
+      "scale": {
+        "type": "log",
+        "base": 2,
+        "nice": true
+      }
+    },
+    "color": {
+      "field": "name",
+      "title": "Implementation",
+      "type": "nominal"
+    }
+  },
+  "layer": [
+    {
+      "mark": { "type": "point", "opacity": 0.5 }
+    },
+    {
+      "mark": { "type": "line", "tooltip": true, "point": "transparent" }
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Non-distributed sorting: Percentage of time spent in each phase",
+  "config": {
+    "font": "Spectral, sans-serif"
+  },
+  "data": {
+    "url": "./sorting-non-distributed-performance.csv"
+  },
+  "transform": [
+    { "fold": [ "reading_the_input", "writing_to_disk", "sorting_on_worker" ] }
+  ],
+  "facet": {
+    "field": "implementation",
+    "type": "nominal",
+    "title": null
+  },
+  "columns": 2,
+  "resolve": {
+    "scale": {
+      "x": "independent"
+    }
+  },
+  "spec": {
+    "encoding": {
+      "x": {
+        "field": "entries",
+        "type": "quantitative",
+        "scale": {
+          "type": "log",
+          "base": 2,
+          "nice": true
+        },
+        "title": "Number of entries",
+        "axis": {
+          "labelExpr": "'₂' + (log(datum.value) / log(2))",
+          "labelAngle": 45
+        }
+      },
+      "color": {
+        "field": "key",
+        "title": "Step",
+        "type": "nominal"
+      },
+      "y": {
+        "field": "value",
+        "title": "Duration (seconds)",
+        "type": "quantitative",
+        "aggregate": "average",
+        "stack": "normalize"
+      }
+    },
+    "layer": [
+      {
+        "mark": { "type": "area" }
+      }
+    ]
+  }
+}

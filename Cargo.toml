@@ -1,3 +1,3 @@
 [workspace]
 resolver = "2"
-members = ["MatrixMult/rust-matrix-multiplication", "Sorting/rust-sorting"]
+members = ["MatrixMult/rust-matrix-multiplication", "Sorting/rust-sorting", "lgca"]

@@ -47,7 +47,7 @@ test: dumbSort gensort valsort
 	./valsort testfile.sorted
 
 run-rust: 
-	unset CC && cd rust-sorting && cargo run --release  -- --algorithm glidesort /mnt/toast/10gb.dat /mnt/toast/
+	unset CC && cd rust-sorting && cargo run --release  -- --work-directory /mnt/toast/tmp --algorithm glidesort /mnt/toast/1gb.dat /mnt/toast/output
 
 run-cpp: dumbSort
 	./dumbSort ./1gb.dat ./1gb.dat.sorted
@@ -58,9 +58,16 @@ run-mpi:
 	mpiexec -n 3 ../target/release/rust-sorting --algorithm mpi-block-sort 1gb.dat ./
 	./valsort output.sorted
 
+run-radix-single-thread: 
+	export
+	unset CC && cd rust-sorting && cargo build --release
+	mpiexec -n 8 ../target/release/rust-sorting --algorithm mpi-radix-single-thread /mnt/toast/100.dat /mnt/toast/
+	# mpiexec -n 4 ../target/release/rust-sorting --algorithm mpi-distributed-radix-sort ./1gb.dat /mnt/toast/
+	./valsort /mnt/toast/output.sorted
+
 run-radix: 
 	export
 	unset CC && cd rust-sorting && cargo build --release
-	mpiexec -n 4 ../target/release/rust-sorting --algorithm mpi-distributed-radix-sort /mnt/toast/10gb.dat /mnt/toast/
+	mpiexec -n 8 ../target/release/rust-sorting --algorithm mpi-distributed-radix-sort /mnt/toast/10gb.dat /mnt/toast/
 	# mpiexec -n 4 ../target/release/rust-sorting --algorithm mpi-distributed-radix-sort ./1gb.dat /mnt/toast/
 	./valsort /mnt/toast/output.sorted

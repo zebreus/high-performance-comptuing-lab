@@ -3,6 +3,8 @@
 #![feature(iter_map_windows)]
 #![feature(array_windows)]
 #![feature(new_uninit)]
+#![feature(split_array)]
+#![feature(inline_const_pat)]
 
 mod lgca;
 

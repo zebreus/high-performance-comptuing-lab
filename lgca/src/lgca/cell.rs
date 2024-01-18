@@ -121,29 +121,89 @@ impl Cell {
         self.raw.count_ones() as u8
     }
 
+    // pub fn process_collision(&mut self, seed: u32) {
+    //     let rand_bool = seed & 1 == 1;
+    //     self.raw = match self.raw {
+    //         // Two opposing particles
+    //         const { TO_WEST | TO_EAST } => {
+    //             if rand_bool {
+    //                 TO_NORTH_EAST | TO_SOUTH_WEST
+    //             } else {
+    //                 TO_SOUTH_EAST | TO_NORTH_WEST
+    //             }
+    //         }
+    //         const { TO_SOUTH_EAST | TO_NORTH_WEST } => {
+    //             if rand_bool {
+    //                 TO_NORTH_EAST | TO_SOUTH_WEST
+    //             } else {
+    //                 TO_EAST | TO_WEST
+    //             }
+    //         }
+    //         const { TO_SOUTH_WEST | TO_NORTH_EAST } => {
+    //             if rand_bool {
+    //                 TO_SOUTH_EAST | TO_NORTH_WEST
+    //             } else {
+    //                 TO_EAST | TO_WEST
+    //             }
+    //         }
+    //         // Three particles
+    //         const { TO_SOUTH_WEST | TO_NORTH_WEST | TO_EAST } => {
+    //             TO_SOUTH_EAST | TO_NORTH_EAST | TO_WEST
+    //         }
+    //         const { TO_SOUTH_EAST | TO_NORTH_EAST | TO_WEST } => {
+    //             TO_SOUTH_WEST | TO_NORTH_WEST | TO_EAST
+    //         }
+
+    //         // Four particles with opposing holes
+    //         0b00110110 => {
+    //             if rand_bool {
+    //                 0b00011011
+    //             } else {
+    //                 0b00101101
+    //             }
+    //         }
+    //         0b00011011 => {
+    //             if rand_bool {
+    //                 0b00101101
+    //             } else {
+    //                 0b00110110
+    //             }
+    //         }
+    //         0b00101101 => {
+    //             if rand_bool {
+    //                 0b00011011
+    //             } else {
+    //                 0b00110110
+    //             }
+    //         }
+
+    //         // Everything else
+    //         _ => self.raw,
+    //     }
+
     pub fn process_collision(&mut self, seed: u32) {
         let rand_bool = seed & 1 == 1;
         self.raw = match self.raw {
             // Two opposing particles
             0b00001001 => {
                 if rand_bool {
-                    TO_NORTH_EAST | TO_SOUTH_WEST
+                    0b00100100
                 } else {
-                    TO_SOUTH_EAST | TO_NORTH_WEST
+                    0b00010010
                 }
             }
             0b00010010 => {
                 if rand_bool {
-                    TO_NORTH_EAST | TO_SOUTH_WEST
+                    0b00100100
                 } else {
-                    TO_EAST | TO_WEST
+                    0b00001001
                 }
             }
             0b00100100 => {
                 if rand_bool {
-                    TO_SOUTH_EAST | TO_NORTH_WEST
+                    0b00010010
                 } else {
-                    TO_EAST | TO_WEST
+                    0b00001001
                 }
             }
             // Three particles

@@ -56,16 +56,17 @@ The following requirements are given by the lab instructions:
 
 
 
-=== Implementation
+=== Implementation concepts
 
-We will store the hexagons row-wise in an odd-q vertical layout:
+The FHP-I model uses hexagonal cells. Each cell can contain up to six particles, one in each direction. The directions are called west, north-west, north-east, east, south-east, and south-west. We will store the cells row-wise in an even-r horizontal layout as shown in <<even-r-layout>>
 
-image::assets/hexagon-layout.png[Hexagon grid]
+."even-r" horizontal layout
+image::../assets/hexagons.svg[even-r layout#even-r-layout,opts=inline]
 
-Each row will be processed independendly from each other. Every cell is stored in a single byte with one bit for each direction. The first bit is the north-east direction, the second bit is the east direction, and so on. The last bit is unused. The first byte of each row is the north-east corner of the row. The first byte of the second row is the north-east corner of the second row, and so on. The last byte of each row is the south-east corner of the row. The last byte of the second row is the south-east corner of the second row, and so on. The last byte of the last row is the south-east corner of the last row.
+Cells are represented by bytes with one bit for each direction as shown in <<cell-memory-layout>>.
 
-// packetdiag
-[packetdiag]
+.A single cell represented as a byte
+[packetdiag#cell-memory-layout]
 ....
 packetdiag {
   node_height = 72;
@@ -81,131 +82,204 @@ packetdiag {
 }
 ....
 
-To calculate the next state of a cell, we need to look at all of its neighbouring cells and move the particles into the current cell. 
+We will represent each row as an array of cells. The whole grid is represented as an array of rows. A single row will always be processed in one go from left to right.
 
-.Movement calculation
-[source#movement_implementation.linenums,cpp]
+First all neighbouring cells are inspected to gather the particles that will move into the current cell. At the edges of the grid the movement step reflects particles that would leave the grid. If the new direction would also point outside of the grid, the particle is reflected in the direction it came from.
+
+After the movement step, collisions inside the new cell are processed. The rules for the collisions are quite simple:
+* If a cell only has two particles traveling in opposite directions, they will rotate by either 60° or -60°.
+* If a cell has three particles traveling in opposite directions, they will rotate by 60° (or -60°, but thats the same).
+* If a cell has exactly four particles with two pairs of opposite directions, they will rotate by either 60° or -60°.
+
+We identified four types of rows that need to be processed differently:
+
+* Even row: The first, third, fifth, ... rows are even rows. The core of the row will be processed normally, but the first and last cell need to be processed differently, as they are missing some neighbours.
+* Odd row: The second, fourth, ... rows are odd rows. Basically the same as even rows, but the first and last cell are processed differently, because other neighbours are missing.
+* Top row: The first row of the grid is similar to an even row, but it has no neighbours to the north, so all particles that would move north are reflected.
+* Bottom row: The last row of the grid is similar to an odd row, but it has no neighbours to the south, so all particles that would move south are reflected. Because the bottom row is an odd row, our implementation will only support grids with an even number of rows.
+
+=== Implementation
+
+We define four functions for the four different cases. Each function has a special case for the first and last cell and delegates the core cells of the row to the `process_row_core` function. The top and bottom rows also have a special case for the core of them, as they need to reflect particles that would move out of the grid.
+
+For big grids, nearly all particles will be processed in the core of the grid, so we want to optimize that case as much as possible. We will use AVX512 SIMD instructions to process 64 cells at once. We will also use a lookup table to process collisions as fast as possible.
+
+==== Processing rows
+
+We define four functions for the four different cases. Each function has a special case for the first and last cell and delegates the core cells of the row to the `movement_core` function. The top and bottom rows also have a special case for the core of them, as they need to reflect particles that would move out of the grid.
+
+To calculate the next state of a cell, we need to look at all of its neighbouring cells and move the particles into the current cell. The movement logic for core cells is shown in <<movement_implementation>>. For cells that are not in core, we need special logic to handle the missing neighbours. It is quite simple, instead of the missing neighbour, we use a particle from the current cell as the neighbour. For example the logic for the top-right cell is shown in <<top-right-movement>>.
+
+.Movement calculation for core cells
+[source#movement_implementation.linenums,rust]
 ----
-*current = (west & 0b00000001)
-         | (north_west & 0b00000010)
-         | (north_east & 0b00000100)
-         | (east & 0b00001000)
-         | (south_east & 0b00010000)
-         | (south_west & 0b00100000);
-----
-
-
-As the GSI has machines that support AVX512 SIMD instructions we want to write code that can be autovectorized by the rust compiler. We used https://godbolt.org to view the generated machine code and make sure that our implementation supports AVX512. 
-
-The movement step will be vectorized to something like this:
-
-.Movement calculation (shortened)
-[source#movement_assembly.linenums,assembly]
-----
-.LCPI0_28:
-        .byte   2
-.LCPI0_29:
-        .byte   1
-.LCPI0_30:
-        .byte   4
-.LCPI0_31:
-        .byte   8
-.LCPI0_32:
-        .byte   16
-.LCPI0_33:
-        .byte   32
-
-calculate_movement:
-        ...
-        vpbroadcastb    zmm0, byte ptr [rip + .LCPI0_28]
-        vpbroadcastb    zmm1, byte ptr [rip + .LCPI0_29]
-        vpbroadcastb    zmm2, byte ptr [rip + .LCPI0_30]
-        vpbroadcastb    zmm3, byte ptr [rip + .LCPI0_31]
-        vpbroadcastb    zmm4, byte ptr [rip + .LCPI0_32]
-        vpbroadcastb    zmm5, byte ptr [rip + .LCPI0_33]
-.LBB0_1:
-        vpandq          zmm14, zmm0, zmmword ptr [rdi + rax]
-        vpternlogq      zmm14, zmm1, zmmword ptr [rsi + rax], 248
-        vpternlogq      zmm14, zmm2, zmmword ptr [rdi + rax + 1], 248
-        vpternlogq      zmm14, zmm3, zmmword ptr [rsi + rax + 2], 248
-        vpternlogq      zmm14, zmm4, zmmword ptr [rdx + rax + 1], 248
-        vpternlogq      zmm14, zmm5, zmmword ptr [rdx + rax], 248
-        add     rax, 64
-        cmp     rax, 4928
-        jne     .LBB0_1
-        ...
-        ret
+include::lgca/src/lgca/new_movements.rs[tag=movement_core]
 ----
 
-After the movement step, we process the collisions. The rules for the collisions are quite simple:
-
-* If a cell only has two particles traveling in opposite directions, they will rotate by either 60°.
-* If a cell has three particles traveling in opposite directions, they will rotate by 60°.
-* If a cell has exactly four particles with two pairs of opposite directions, they will rotate by 60°.
-
-This can be implemented with the following match statement:
-
-.Collision calculation using match
-[source#collision_implementation.linenums,rust]
+.Movement calculation for the top-right corner cell
+[source#top_right_movement_implementation.linenums,rust]
 ----
-pub fn process_collision(number: u8) -> u8 {
-    match number {
-        // Two opposing particles
-        0b00001001 => 0b00100100,
-        0b00010010 => 0b00001001,
-        0b00100100 => 0b00010010,
-          
-        // Three particles
-        0b00101010 => 0b00010101,
-        0b00010101 => 0b00101010,
+include::lgca/src/lgca/new_movements.rs[tag=top_right_movement_implementation]
+----
 
-        // Four particles with opposing holes
-        0b00110110 => 0b00011011,
-        0b00011011 => 0b00101101,
-        0b00101101 => 0b00011011,
+Our default collision handling is implemented in the `process_collision` function as shown in <<collision_real_implementation>>. It uses a match statement to map the collision cases to the results. The default cases leaves the value unchanged. In cases where there are two options a real random number is used to select one.
 
-        // Everything else
-        x => x,
-    }
+.Default collision handling using real randomness
+[source#collision_real_implementation.linenums,rust]
+----
+include::lgca/src/lgca/cell.rs[tag=collision_real]
+----
+
+While this collision implementation is correct, its performance is quite bad, because we need to generate a random number for every collision. It also has lots of branching and the compiler is not able to autovectorize it.
+
+==== Optimizing 
+
+For big grids, nearly all particles will be processed in the core of the grid, so we want to optimize that case as much as possible. As the GSI has machines that support AVX512 we want to write code that utilizes these instructions to process 64 cells at once. While we could have tried to write the movement and collision logic in x86 assembly, we choose to try to write logic that can be autovectorized by the compiler when processing large arrays of cells. We used https://godbolt.org to view the generated machine code and make sure that our implementation supports AVX512. To enable autovectorization for AVX512 instructions we used the rust flags shown in <<avx512-rust-flags>>.
+
+.Rust flags for enableing AVX512
+[source#avx512-rust-flags,console]
+----
+-C opt-level=3
+-C target-feature=+avx2,+avx,+sse2,+avx512vl,+avx512f,+avx512bw,+avx512cd,+avx512dq,+avx512vnni
+----
+
+The basic function we use for processing the core of a row is shown in <<movement_core_implementation_no_collisions>>. It takes readonly references, to the current row and the row above and below it. It then iterates through them using sliding windows, so all six neighbours of the current cell are available at once. The new state of each cell is calculated and placed into the cell of the result array.
+
+.Function for processing the core of a row without collisions
+[source#movement_core_implementation_no_collisions.linenums,rust]
+----
+pub fn process_core<const WIDTH: usize>(
+    above: &[u8; WIDTH - 1],
+    current: &[u8; WIDTH],
+    below: &[u8; WIDTH - 1],
+    result: &mut [u8; WIDTH - 2]
+) {
+    let context_iterator = above
+        .array_windows::<2>()
+        .zip(current.array_windows::<3>())
+        .zip(below.array_windows::<2>())
+        .zip(result.iter_mut());
+
+    context_iterator.for_each(
+        |(
+            (([north_west, north_east], [west, _current, east]), [south_west, south_east]),
+            result,
+        )| {
+            let new_cell = (west & 0b00100000)
+                | (north_west & 0b00010000)
+                | (north_east & 0b00001000)
+                | (east & 0b00000100)
+                | (south_east & 0b00000010)
+                | (south_west & 0b00000001);
+            *result = new_cell;
+            // Collision handling omitted for now
+        },
+    )
 }
 ----
 
-However when we look at the generated assembly, we see that the match statement is not autovectorized. Instead the compiler generates a jump table and uses a scalar comparison to find the correct branch. This is not ideal, as we want to use the AVX512 instructions to process multiple cells at once. We found that the most reliable way to get autovectoriztation is to use multiple simple if statements that can be implemented with a
+<<movement_core_assembly_no_collisions>> shows the generated assembly for the function. We can see that the compiler autovectorized the function and uses the AVX512 instructions to process 64 cells at once.
+At first `vpbroadcastb` is used to populate the 512-bit vector registers `zmm0`-`zmm5` with the mask for each direction. The result will be placed into the `zmm6` register. The main loop first uses `vpandq` to set each cell in the result register to the value of the north-western cell masked by a mask that removes all particles except the one moving from north-west to south-east. This also resets the value of all other particles in `zmm6` to zero. Then `vpternlogq` is used with each of the five remaining directions to add the particles that move into the current cell from that direction. After that `zmm6` is stored back into memory. This way 64 cells are processed at once. If there are more than 64 cells left, the above is repeated, otherwise the program uses non-vectorized logic for the remaining cells.
 
-.Collision calculation using if statements
-[source#collision_implementation_if.linenums,rust]
+
+.Assembly for `process_core` without collisions
+[source#movement_core_assembly_no_collisions.linenums,x86asm]
 ----
-    if *result == 0b00101010 {
+.LCPI0_12:
+        .byte   16
+.LCPI0_13:
+        .byte   32
+.LCPI0_14:
+        .byte   8
+.LCPI0_15:
+        .byte   4
+.LCPI0_16:
+        .byte   2
+.LCPI0_17:
+        .byte   1
+
+process_core:
+        vpbroadcastb    zmm0, byte ptr [rip + .LCPI0_12]
+        vpbroadcastb    zmm1, byte ptr [rip + .LCPI0_13]
+        vpbroadcastb    zmm2, byte ptr [rip + .LCPI0_14]
+        vpbroadcastb    zmm3, byte ptr [rip + .LCPI0_15]
+        vpbroadcastb    zmm4, byte ptr [rip + .LCPI0_16]
+        vpbroadcastb    zmm5, byte ptr [rip + .LCPI0_17]
+.LBB0_1:
+        vpandq  zmm6, zmm0, zmmword ptr [rdi + rax]
+        vpternlogq      zmm6, zmm1, zmmword ptr [rsi + rax], 248
+        vpternlogq      zmm6, zmm2, zmmword ptr [rdi + rax + 1], 248
+        vpternlogq      zmm6, zmm3, zmmword ptr [rsi + rax + 2], 248
+        vpternlogq      zmm6, zmm4, zmmword ptr [rdx + rax + 1], 248
+        vpternlogq      zmm6, zmm5, zmmword ptr [rdx + rax], 248
+        vmovdqu64       zmmword ptr [rcx + rax], zmm6
+        add     rax, 64
+        cmp     rax, 9984
+        jne     .LBB0_1
+        ... ; Non-vectorized logic for the remaining cells (lt 64)
+        ret
+----
+
+This implementation is correct, but it does not handle collisions yet. The trivial way of just adding the collision handling we defined above breaks autovectorization. We will need to find a different way to implement collisions. It is probably not possible to autovectorize the collision handling using true randomness, it has a lot of conditional code that is difficult to vectorize. We tried a few different implementations, like using a simple match statement without randomness (<<collision_implementation_without_randomness>>), a static lookup table (<<collision_implementation_without_randomness_lut>>) and if-else statements (<<collision_implementation_without_randomness_else>>), but they all broke auto vectorization. However we found that if we were using multiple if statements, the compiler is able to transform them into vectorized assembly. <<collision_implementation_if_not_random>> shows the implementation we ended up with. It needs to reassign `new_cell` sometimes, because autovectorization breaks otherwise. We are not entirely sure why this is the case.
+
+NOTE: The lookup table solution for collisions might be possible when the CPU supports AVX512-VBMI, but we did not have access to such a CPU.
+
+
+.Non-random collision calculation using if statements
+[source#collision_implementation_if_not_random.linenums,rust]
+----
+    // Three particle collisions
+    if new_cell == 0b00101010 {
         *result = 0b00010101;
     }
-    if *result == 0b00010101 {
+    if new_cell == 0b00010101 {
         *result = 0b00101010;
     }
-    if *result == 0b00100100 {
+    new_cell = *result;
+
+    // Two particle collisions
+    if new_cell == 0b00100100 {
         *result = 0b00010010;
     }
-    if *result == 0b00010010 {
+    if new_cell == 0b00010010 {
         *result = 0b00001001;
     }
-    if *result == 0b00001001  {
+    if new_cell == 0b00001001  {
         *result = 0b00100100;
     }
-    if *result == 0b00110110  {
+    new_cell = *result;
+
+    // Four particle collisions
+    if new_cell == 0b00110110  {
         *result = 0b00011011;
     }
-    if *result == 0b00101101 {
+    if new_cell == 0b00101101 {
         *result = 0b00110110;
     }
-    if *result == 0b00011011 {
+    if new_cell == 0b00011011 {
         *result = 0b00101101;
     }
 ----
 
-results in the following assembly:
+If we add that logic to the process_core function from above, the generated 
 
-.Movement calculation (shortened)
-[source#movement_assembly.linenums,assembly]
+The assembly for the `process_core` function with the collision implementation from <<collision_implementation_if_not_random>> is shown in <<collision_assembly_non_random>>
+
+.Assembly for `process_core` with non-random collisions
+[source#collision_assembly_non_random.linenums,x86asm]
 ----
+.LCPI0_28:
+        .byte   16
+.LCPI0_29:
+        .byte   32
+.LCPI0_30:
+        .byte   8
+.LCPI0_31:
+        .byte   4
+.LCPI0_32:
+        .byte   2
+.LCPI0_33:
+        .byte   1
 .LCPI0_34:
         .byte   42
 .LCPI0_35:
@@ -223,8 +297,17 @@ results in the following assembly:
 .LCPI0_41:
         .byte   45
 
-process_collisions:
-        ...
+process_core:
+        mov     r11, rcx
+        xor     eax, eax
+        ; Masks for each direction
+        vpbroadcastb    zmm0, byte ptr [rip + .LCPI0_28]
+        vpbroadcastb    zmm1, byte ptr [rip + .LCPI0_29]
+        vpbroadcastb    zmm2, byte ptr [rip + .LCPI0_30]
+        vpbroadcastb    zmm3, byte ptr [rip + .LCPI0_31]
+        vpbroadcastb    zmm4, byte ptr [rip + .LCPI0_32]
+        vpbroadcastb    zmm5, byte ptr [rip + .LCPI0_33]
+        ; Masks for each collision case
         vpbroadcastb    zmm6, byte ptr [rip + .LCPI0_34]
         vpbroadcastb    zmm7, byte ptr [rip + .LCPI0_35]
         vpbroadcastb    zmm8, byte ptr [rip + .LCPI0_36]
@@ -233,74 +316,211 @@ process_collisions:
         vpbroadcastb    zmm11, byte ptr [rip + .LCPI0_39]
         vpbroadcastb    zmm12, byte ptr [rip + .LCPI0_40]
         vpbroadcastb    zmm13, byte ptr [rip + .LCPI0_41]
-        ...
 .LBB0_1:
-        ... ; zmm14 contains 64 cells
+        vpandq  zmm14, zmm0, zmmword ptr [rdi + rax]
+        vpternlogq      zmm14, zmm1, zmmword ptr [rsi + rax], 248
+        vpternlogq      zmm14, zmm2, zmmword ptr [rdi + rax + 1], 248
+        vpternlogq      zmm14, zmm3, zmmword ptr [rsi + rax + 2], 248
+        vpternlogq      zmm14, zmm4, zmmword ptr [rdx + rax + 1], 248
+        vpternlogq      zmm14, zmm5, zmmword ptr [rdx + rax], 248
+        ; Process collisions
         vpcmpeqb        k1, zmm14, zmm6
+        vpcmpeqb        k2, zmm14, zmm7
         vmovdqu8        zmm14 {k1}, zmm7
-        vpcmpeqb        k1, zmm14, zmm7
-        vmovdqu8        zmm14 {k1}, zmm6
+        vmovdqu8        zmm14 {k2}, zmm6
         vpcmpeqb        k1, zmm14, zmm8
-        vmovdqu8        zmm14 {k1}, zmm9
+        vpblendmb       zmm15 {k1}, zmm14, zmm9
         vpcmpeqb        k1, zmm14, zmm9
-        vmovdqu8        zmm14 {k1}, zmm10
+        vmovdqu8        zmm15 {k1}, zmm10
         vpcmpeqb        k1, zmm14, zmm10
-        vmovdqu8        zmm14 {k1}, zmm8
-        vpcmpeqb        k1, zmm14, zmm11
-        vmovdqu8        zmm14 {k1}, zmm12
-        vpcmpeqb        k1, zmm14, zmm13
+        vmovdqu8        zmm15 {k1}, zmm8
+        vpcmpeqb        k1, zmm15, zmm11
+        vpblendmb       zmm14 {k1}, zmm15, zmm12
+        vpcmpeqb        k1, zmm15, zmm13
         vmovdqu8        zmm14 {k1}, zmm11
-        vpcmpeqb        k1, zmm14, zmm12
+        vpcmpeqb        k1, zmm15, zmm12
         vmovdqu8        zmm14 {k1}, zmm13
+        vmovdqu64       zmmword ptr [r11 + rax], zmm14
         add     rax, 64
-        cmp     rax, 4928
+        cmp     rax, 9984
         jne     .LBB0_1
-        ...
+        ... ; Non-vectorized logic for the remaining cells (lt 64)
         ret
 ----
 
-However this implementation still has a few logic bugs. For example the case with three particles will be rotated twice, as the first if statement will match and then the second if statement will match. We tried multiple ways to fix it, the ones below all broke auto vectorization:
-* Using a match statement with a guard clause
-* Using if else statements
+// However this implementation does always redirect collisions in the same direction. To mitigate that problem, we look at the neighbouring cells and try to detect if they look like if they were already affected by a collision of the same type in the previous round. If that is the case, we redirect the collision in the other direction. This way we get alternating collisions in the same cell for particle beams.
+This implementation always turns to the right on collisions. Implementing true randomness without sacrificing performance is not trivial. As a workaround, we adjusted our algorithm to try to always turn in the same direction, except when there is a particle, then we turn left. This way two collding particle streams will scatter alternating between turning left and right. This behaviour is not perfect, but it is should be good enough for our purposes. We will revisit this, when we have implemented better and may be able to improve it then. The final implementation of `process_core` is shown in <<process_core_implementation>>. 
 
-We ended up assigning the value of the cell to a temporary variable and using that as the basis for comparison. This way the result of the previous if statement is not used as the input for the next if statement. For some reason auto vectorization breaks when we dont reassing the value to a temporary variable.
 
-[source#collision_implementation_if.linenums,rust]
+.Function for processing the core of a row with fake-collisions
+[source#process_core_implementation.linenums,rust]
 ----
-*result = temp;
-if temp == 0b00100100 {
-    *result = 0b00010010;
-}
-if temp == 0b00010010 {
-    *result = 0b00001001;
-}
-if temp == 0b00001001  {
-    *result = 0b00100100;
-}
-if temp == 0b00101010 {
-    *result = 0b00010101;
-}
-if temp == 0b00010101 {
-    *result = 0b00101010;
-}
-temp = *result;
-if temp == 0b00110110  {
-    *result = 0b00011011;
-}
-if temp == 0b00101101 {
-    *result = 0b00110110;
-}
-if temp == 0b00011011 {
-    *result = 0b00101101;
+pub fn process_core<const WIDTH: usize>(
+    above: &[u8; WIDTH - 1],
+    current: &[u8; WIDTH],
+    below: &[u8; WIDTH - 1],
+    result: &mut [u8; WIDTH - 2]
+) {
+    let context_iterator = above
+        .array_windows::<2>()
+        .zip(current.array_windows::<3>())
+        .zip(below.array_windows::<2>())
+        .zip(result.iter_mut());
+
+    context_iterator.for_each(
+        |(
+            (([north_west, north_east], [west, _current, east]), [south_west, south_east]),
+            result,
+        )| {
+            let new_cell = (west & 0b00100000)
+                | (north_west & 0b00010000)
+                | (north_east & 0b00001000)
+                | (east & 0b00000100)
+                | (south_east & 0b00000010)
+                | (south_west & 0b00000001);
+            *result = new_cell;
+            
+            if (new_cell == 0b00100100) && (south_east & 0b00010000 == 0) {
+                *result = 0b00010010;
+            }
+            if (new_cell == 0b00100100) && (south_east & 0b00010000 != 0) {
+                *result = 0b00001001;
+            }
+            if (new_cell == 0b00011011) && (south_east & 0b00010000 == 0) {
+                *result = 0b00101101;
+            }
+            if (new_cell == 0b00011011) && (south_east & 0b00010000 != 0) {
+                *result = 0b00110110;
+            }
+
+            if new_cell == 0b00010010 && (east & 0b00001000 == 0) {
+                *result = 0b00001001;
+            }
+            if new_cell == 0b00010010 && (east & 0b00001000 != 0) {
+                *result = 0b00100100;
+            }
+            if new_cell == 0b00101101 && (east & 0b00001000 == 0) {
+                *result = 0b00110110;
+            }
+            if new_cell == 0b00101101 && (east & 0b00001000 != 0) {
+                *result = 0b00011011;
+            }
+
+            if new_cell == 0b00001001 && (north_east & 0b00000100 == 0) {
+                *result = 0b00100100;
+            }
+            if new_cell == 0b00001001 && (north_east & 0b00000100 != 0) {
+                *result = 0b00010010;
+            }
+            if new_cell == 0b00110110 && (north_east & 0b00000100 == 0) {
+                *result = 0b00011011;
+            }
+            if new_cell == 0b00110110 && (north_east & 0b00000100 != 0) {
+                *result = 0b00101101;
+            }
+
+            if new_cell == 0b00101010 {
+                *result = 0b00010101;
+            }
+            if new_cell == 0b00010101 {
+                *result = 0b00101010;
+            }
+            new_cell = *result; // This line does nothing, but autovectorization breaks without it
+        },
+    )
 }
 ----
 
-This implementation always turns to the right on collisions. Implementing true randomness without sacrificing performance is not trivial. As a workaround, we adjusted our algorithm to
 
-Duration per round with real random: 0.5
-Duration per round without collisions: 0.15
-Duration with fast collisions: 0.15
-Duration with real collisions during movement: 1.2
+For collisions on the borders of the grid, we use a less optimized implementations which is just calling the `proccess_collision` function (<<collision_real_implementation>>) for each cell. Only a small portion of the cells will be on the border of the grid, so this should not have a big impact on performance.
+
+// https://godbolt.org/z/sEb5qaca8
+
+We measured the average duration for one cell for a 2000x2000 grid with 5000 rounds and got the following results:
+
+* With real random collisions: 3.76415ns per cell
+* With AVX fake random collisions: 0.22619ns per cell
+* With AVX fake random collisions but with vectorization disabled: 2.50546ns per cell
+* Without collisions: 0.06601ns per cell
+
+The results show that our vectorized implementation have a 10x speedup over the non-vectorized implementation. Our test machine only supports 256-bit vector operations, so the results above only reflect that. We expect the performance to be better on machines that support AVX512. 
+
+==== Main loop
+
+The core of the simulation is based around two grids, `grid_a` contains the current state and `grid_b` contains the next state. We fill the top row, the core rows, and the bottom row of grid_b in separate functions. After grid_b is done, it is swapped with grid_a and the process is repeated. The main loop is shown in <<core_without_rayon>>.
+
+.One step of the main loop
+[source#core_without_rayon.linenums,rust]
+----
+movement_top_row(&grid_a[0], &grid_a[1], &mut grid_b[0]);
+
+grid_a
+    .windows(3)
+    .zip(grid_b.iter_mut().skip(1))
+    .enumerate()
+    .for_each(|(row_index, (context, result))| {
+        let above = &context[0];
+        let current = &context[1];
+        let below = &context[2];
+        if ((row_index + 1) % 2) == 0 {
+            movement_even_row(above, current, below, result);
+        } else {
+            movement_odd_row(above, current, below, result);
+        }
+    });
+
+movement_bottom_row(&grid_a[WIDTH-2], &grid_a[WIDTH-1], &mut grid_b[WIDTH-1]);
+
+std::mem::swap(&mut grid_a, &mut grid_b);
+----
+
+==== Multithreading with Rayon
+
+We will use rayon to divide the processing of the core rows over multiple threads. `par_windows` can be used instead of `windows` and `par_iter_mut` can be used instead of `iter_mut` to process the rows in parallel. The main loop with rayon is shown in <<core_with_rayon>>.
+
+.One round using rayon
+[source#core_with_rayon.linenums,rust]
+----
+movement_top_row(&grid_a[0], &grid_a[1], &mut grid_b[0]);
+
+grid_a
+    .par_windows(3)
+    .zip(grid_b.par_iter_mut().skip(1))
+    .enumerate()
+    .for_each(|(row_index, (context, result))| {
+        let above = &context[0];
+        let current = &context[1];
+        let below = &context[2];
+        if ((row_index + 1) % 2) == 0 {
+            movement_even_row(above, current, below, result);
+        } else {
+            movement_odd_row(above, current, below, result);
+        }
+    });
+
+movement_bottom_row(&grid_a[WIDTH-2], &grid_a[WIDTH-1], &mut grid_b[WIDTH-1]);
+
+std::mem::swap(&mut grid_a, &mut grid_b);
+----
+
+.Multithreading measurements
+* Without rayon: 0.21101ns per cell
+* With 1 thread: 0.21776ns per cell
+* With 2 threads: 0.11265ns per cell
+* With 4 threads: 0.060394ns per cell
+* With 6 threads: 0.046102ns per cell
+* With 7 threads: 0.042037ns per cell
+* With 8 threads: 0.040239ns per cell
+* With 9 threads: 0.040608ns per cell
+* With 10 threads: 0.040653ns per cell
+* With 10 threads: 0.038776ns per cell
+* With 16 threads: 0.038706ns per cell
+* With 20 threads: 0.050061ns per cell
+
+We made measurements for a 2000x2000 grid with 5000 rounds. An intel i9-11950H was used for testing. It is based on the willow cove microarchitecture and has 8 cores and 16 threads. The measurements show that the performance is best with 8 threads. I am not certain why this is the case. I would like to think that a single thread keeps the shared vector units on its core busy all the time, because there are nearly no branches and most instructions in the main loop are vector instructions. However it may as well be that there is a memory bottleneck.
+// TODO: Figure out why 8 threads is the best
+
+Afterwards we figured out that our CPU does actually support the required AVX512 instructions. We redid the 8 threads measurement and got a performance of 0.034543ns per cell.
 
 === Results
 
@@ -401,6 +621,135 @@ include::scripts/vega-chart.adoc[]
 // Abbreviations in random order and links to read more about them
 [glossary]
 [[LGCA]]LGCA:: Lattice gas cellular automaton link:pass:[https://en.wikipedia.org/wiki/Lattice_gas_automaton][🔗^]
+[[AVX512]]AVX512:: Advanced Vector Extensions 512 for x86 link::pass:[https://en.wikichip.org/wiki/x86/avx-512][🔗^]
 
+== Appendix
+
+
+.Collision calculation using match without randomness
+[source#collision_implementation_without_randomness.linenums,rust]
+----
+pub fn process_collision(cell: u8) -> u8 {
+    match cell {
+        // Two opposing particles
+        0b00001001 => 0b00100100,
+        0b00010010 => 0b00001001,
+        0b00100100 => 0b00010010,
+          
+        // Three particles
+        0b00101010 => 0b00010101,
+        0b00010101 => 0b00101010,
+
+        // Four particles with opposing holes
+        0b00110110 => 0b00011011,
+        0b00011011 => 0b00101101,
+        0b00101101 => 0b00011011,
+
+        // Everything else
+        x => x,
+    }
+}
+----
+
+.Collision calculation using a lookup table
+[source#collision_implementation_without_randomness_lut.linenums,rust]
+----
+const COLLISION_TABLE: [u8; 64] = [
+    0b0000_0000,
+    0b0000_0001,
+    0b0000_0010,
+    0b0000_0011,
+    0b0000_0100,
+    0b0000_0101,
+    0b0000_0110,
+    0b0000_0111,
+    0b0000_1000,
+    0b0001_0010,
+    0b0000_1010,
+    0b0000_1011,
+    0b0000_1100,
+    0b0000_1101,
+    0b0000_1110,
+    0b0000_1111,
+    0b0001_0000,
+    0b0001_0001,
+    0b0010_0010,
+    0b0001_0011,
+    0b0001_0100,
+    0b0010_1010,
+    0b0001_0110,
+    0b0001_0111,
+    0b0001_1000,
+    0b0001_1001,
+    0b0001_1010,
+    0b0010_1101,
+    0b0001_1100,
+    0b0001_1101,
+    0b0001_1110,
+    0b0001_1111,
+    0b0010_0000,
+    0b0010_0001,
+    0b0010_0010,
+    0b0010_0011,
+    0b0000_1001,
+    0b0010_0101,
+    0b0010_0110,
+    0b0010_0111,
+    0b0010_1000,
+    0b0010_1001,
+    0b0001_0101,
+    0b0010_1011,
+    0b0010_1100,
+    0b0011_0110,
+    0b0010_1110,
+    0b0010_1111,
+    0b0011_0000,
+    0b0011_0001,
+    0b0011_0010,
+    0b0011_0011,
+    0b0011_0100,
+    0b0011_0101,
+    0b0001_1011,
+    0b0011_0111,
+    0b0011_1000,
+    0b0011_1001,
+    0b0011_1010,
+    0b0011_1011,
+    0b0011_1100,
+    0b0011_1101,
+    0b0011_1110,
+    0b0011_1111,
+];
+
+pub fn process_collision(cell: u8) -> u8 {
+    COLLISION_TABLE[cell as usize]
+}
+----
+
+.Collision calculation using if-else statements
+[source#collision_implementation_without_randomness_else.linenums,rust]
+----
+    if *result == 0b00101010 {
+        *result = 0b00010101;
+    } else if *result == 0b00010101 {
+        *result = 0b00101010;
+    }else if *result == 0b00100100 {
+        *result = 0b00010010;
+    }
+
+    if *result == 0b00010010 {
+        *result = 0b00001001;
+    } else if *result == 0b00001001  {
+        *result = 0b00100100;
+    }
+
+    if *result == 0b00110110  {
+        *result = 0b00011011;
+    } else if *result == 0b00101101 {
+        *result = 0b00110110;
+    } else if *result == 0b00011011 {
+        *result = 0b00101101;
+    }
+----
 
 include::scripts/trailing-scripts.adoc[]

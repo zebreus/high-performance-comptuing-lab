@@ -10,7 +10,7 @@ clap = { version = "4.4.17", features = ["derive"] }
 hsl = "0.1.1"
 hsv = "0.1.1"
 mpi = { version = "0.7.0", features = ["user-operations", "derive"] }
-rand = "0.8.5"
+rand = { version = "0.8.5", features = ["small_rng"] }
 rayon = "1.8.0"
 ril = { version = "0.10.1", features = ["all"] }
 rust_mpi = "0.0.3"

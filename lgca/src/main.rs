@@ -1,177 +1,336 @@
+#![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 #![feature(array_chunks)]
 #![feature(iter_map_windows)]
 #![feature(array_windows)]
 #![feature(new_uninit)]
 #![feature(split_array)]
+#![feature(stmt_expr_attributes)]
 #![feature(inline_const_pat)]
 
 mod lgca;
-use rand::prelude::*;
-
+use crate::lgca::{
+    new_movements::{movement_bottom_row, movement_even_row, movement_odd_row, movement_top_row},
+    visualization::draw_cells_detailed,
+};
 use clap::Parser;
 use lgca::Cell;
+use mpi::request::WaitGuard;
+use mpi::topology::SimpleCommunicator;
 use mpi::traits::*;
-use ril::{Frame, Image, ImageSequence, Rgb, Rgba};
+use rand::prelude::*;
+use rayon::prelude::*;
+use rayon::{
+    iter::{IndexedParallelIterator, IntoParallelRefMutIterator},
+    slice::ParallelSlice,
+};
+use ril::{Frame, Image, ImageSequence, Rgb};
 use std::{
     path::PathBuf,
     time::{Duration, Instant},
 };
 
-use crate::lgca::{
-    new_movements::{
-        movement_bottom_row, movement_even_row, movement_odd_row, movement_top_row, print_section,
-    },
-    visualization::{draw_cells_b, draw_cells_c, draw_cells_detailed},
-};
-
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
-    /// File containing the input data
-    input: PathBuf,
-
     /// Where to write the output files. Must be a directory
+    #[arg(short, long, default_value = "./")]
     output_directory: PathBuf,
+    /// Percentage of particles filled with random noise
+    #[arg(short, long, default_value_t = 0.04)]
+    noise: f64,
+
+    /// Percentage of particles filled with random noise
+    #[arg(short, long, default_value_t = 5000)]
+    rounds: usize,
+
+    /// Speed in rounds per second
+    #[arg(short, long, default_value_t = 1000)]
+    speed: usize,
+
+    /// Framerate in frames per second
+    #[arg(short, long, default_value_t = 60)]
+    framerate: usize,
+
+    /// Scaling factor of the output video
+    #[arg(long, default_value_t = 0.26)]
+    scaling: f64,
+
+    /// Number of threads to use
+    #[arg(short, long, default_value_t = 1)]
+    threads: usize,
+
+    /// Number of rows (Divided by number of mpi ranks)
+    #[arg(long, default_value_t = 1)]
+    height: usize,
 }
 
 fn main() {
-    // let cli = Cli::parse();
+    let mpi_version = mpi::environment::library_version();
+    let mpi_universe = if mpi_version.is_ok() {
+        mpi::initialize_with_threading(mpi::Threading::Serialized)
+    } else {
+        None
+    };
 
-    // let input = cli.input;
-    // let output_directory = cli.output_directory;
+    let size = mpi_universe
+        .as_ref()
+        .map_or(1, |o: &(mpi::environment::Universe, mpi::Threading)| {
+            o.0.world().size()
+        });
+    let rank = mpi_universe.as_ref().map_or(0, |o| o.0.world().rank());
+    let previous_rank: Option<i32> = if rank == 0 { None } else { Some(rank - 1) };
+    let next_rank: Option<i32> = if rank == (size - 1) as i32 {
+        None
+    } else {
+        Some(rank + 1)
+    };
 
-    // let mpi_version = mpi::environment::library_version();
-    // let mpi_universe = if mpi_version.is_ok() {
-    //     mpi::initialize_with_threading(mpi::Threading::Single)
-    // } else {
-    //     None
-    // };
+    let cli = Cli::parse();
 
-    // let rank = mpi_universe.as_ref().map_or(0, |o| o.0.world().rank());
+    let rounds = cli.rounds;
+    let noise = cli.noise;
+    let threads = cli.threads;
+    let image_scaling = cli.scaling;
+    let rounds_per_second = cli.speed;
+    let frames_per_second = cli.framerate;
+    let time_per_round = Duration::from_secs_f64(1.0 / rounds_per_second as f64);
+    let time_per_frame = Duration::from_secs_f64(1.0 / frames_per_second as f64);
+    let height = (cli.height.div_ceil(size as usize)) * size as usize;
+    let filepath = cli.output_directory.join(format!("output_{}.webp", rank));
+    let filename = filepath.to_str().unwrap();
 
-    // let input_file_exists = input.is_file();
-    // if rank == 0 && !input_file_exists {
-    //     eprintln!("Input file {:?} does not exist or is not a file", input);
-    //     std::process::exit(1);
-    // }
+    if !cli.output_directory.is_dir() {
+        if cli.output_directory.exists() {
+            panic!("Output directory is not a directory");
+        }
+        std::fs::create_dir_all(&cli.output_directory).unwrap();
+    }
 
-    // let output_is_directory = output_directory.is_dir();
-    // if rank == 0 && !output_is_directory {
-    //     eprintln!("Creating output directory {:?}", output_directory);
-    //     std::fs::create_dir_all(&output_directory).unwrap();
-    // }
-
-    // let before_processing = Instant::now();
-
-    // // Content
-
-    // let duration = before_processing.elapsed();
-
-    // if rank == 0 {
-    //     println!("{}", duration.as_secs_f64());
-    // }
-
-    const WIDTH: usize = 2000;
-    const HEIGHT: usize = 2000;
-
+    const WIDTH: usize = 10000;
     const BOX: usize = 600;
+
+    // Put the correct number of threads into rayons global thread pool
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(threads)
+        .build_global()
+        .unwrap();
+
     // Create a sample section
-    let mut sections_box = Box::new([[Cell::new(); WIDTH]; HEIGHT]);
-    let mut sections_b_box = Box::new([[Cell::new(); WIDTH]; HEIGHT]);
-    let mut sections = sections_box.as_mut();
-    let mut sections_b = sections_b_box.as_mut();
+    let mut sections_box = vec![[Cell::new(); WIDTH]; height];
+    let mut sections_b_box = vec![[Cell::new(); WIDTH]; height];
+    let mut grid_a: &mut [[Cell; WIDTH]] = sections_box.as_mut();
+    let mut grid_b: &mut [[Cell; WIDTH]] = sections_b_box.as_mut();
 
-    sections[1][1].raw = 0b00111111;
-    for x in 0..BOX {
-        for y in 0..BOX {
-            sections[y][x].raw = 0b00111111;
+    grid_a[1][1].raw = 0b00111111;
+    if previous_rank.is_none() {
+        for x in 0..BOX {
+            for y in 0..BOX {
+                grid_a[y][x].raw = 0b00111111;
+            }
         }
     }
 
-    const NOISE: f64 = 0.04;
-
-    eprintln!("Genrating background noise");
     let random = &mut rand::thread_rng();
-    for y in 0..HEIGHT {
+    for y in 0..height {
         for x in 0..WIDTH {
-            if random.gen_bool(NOISE) {
-                sections[y][x].set_to_east(true)
+            if random.gen_bool(noise) {
+                grid_a[y][x].set_to_east(true)
             }
-            if random.gen_bool(NOISE) {
-                sections[y][x].set_to_north_east(true)
+            if random.gen_bool(noise) {
+                grid_a[y][x].set_to_north_east(true)
             }
-            if random.gen_bool(NOISE) {
-                sections[y][x].set_to_north_west(true)
+            if random.gen_bool(noise) {
+                grid_a[y][x].set_to_north_west(true)
             }
-            if random.gen_bool(NOISE) {
-                sections[y][x].set_to_south_east(true)
+            if random.gen_bool(noise) {
+                grid_a[y][x].set_to_south_east(true)
             }
-            if random.gen_bool(NOISE) {
-                sections[y][x].set_to_south_west(true)
+            if random.gen_bool(noise) {
+                grid_a[y][x].set_to_south_west(true)
             }
-            if random.gen_bool(NOISE) {
-                sections[y][x].set_to_west(true)
+            if random.gen_bool(noise) {
+                grid_a[y][x].set_to_west(true)
             }
         }
     }
-    eprintln!("Genrated background noise");
-
-    // for x in 0..75 {
-    //     sections[100][25 + x].raw = 0b00001000;
-    //     sections[100][100 + x].raw = 0b00000001;
-    // }
-
-    let time_before = Instant::now();
-    const ROUNDS: u32 = 100000;
-    // sections[0][1].raw = TO_NORTH_WEST;
-    eprintln!("============================ Intial");
+    eprintln!("============================ Round 0");
     let mut images: Vec<Image<Rgb>> = Vec::new();
-    images.push(draw_cells_detailed(sections).resized(
-        (WIDTH / 4) as u32 + 3,
-        (HEIGHT / 4) as u32 + 3,
+    images.push(draw_cells_detailed(grid_a).resized(
+        (WIDTH as f64 * image_scaling) as u32,
+        (height as f64 * image_scaling) as u32,
         ril::ResizeAlgorithm::Lanczos3,
     ));
-    for round in 0..ROUNDS {
-        movement_top_row(&sections[0], &sections[1], &mut sections_b[0]);
-        for (row, ([above, current, below], result)) in sections
-            .array_windows::<3>()
-            .zip(sections_b.iter_mut().skip(1))
-            .enumerate()
-        {
-            if ((row + 1) % 2) == 0 {
-                movement_even_row(above, current, below, result);
-            } else {
-                movement_odd_row(above, current, below, result);
-            }
+    let mut top_bottom_duration: Duration = Duration::new(0, 0);
+    let mut core_duration: Duration = Duration::new(0, 0);
+    let mut communication_duration: Duration = Duration::new(0, 0);
+    let mut render_duration: Duration = Duration::new(0, 0);
+
+    let mut receive_top_box = Box::new([Cell::new(); WIDTH]);
+    let mut receive_bottom_box = Box::new([Cell::new(); WIDTH]);
+    let receive_top = receive_top_box.as_mut();
+    let receive_bottom = receive_bottom_box.as_mut();
+
+    let mut gif_time = Duration::new(0, 0);
+    for round in 0..rounds {
+        // process_round(grid_a, grid_b);
+        let communication_time = Instant::now();
+        if mpi_universe.is_some() {
+            let world = SimpleCommunicator::world();
+            mpi::request::scope(|scope| {
+                let mut guards = Vec::new();
+
+                if let Some(previous_rank) = previous_rank {
+                    guards.push(WaitGuard::from(
+                        world
+                            .process_at_rank(previous_rank)
+                            .immediate_send(scope, unsafe {
+                                std::mem::transmute::<&mut [Cell; WIDTH], &mut [u8; WIDTH]>(
+                                    &mut grid_a[0],
+                                )
+                            }),
+                    ));
+                    guards.push(WaitGuard::from(
+                        world.process_at_rank(previous_rank).immediate_receive_into(
+                            scope,
+                            unsafe {
+                                std::mem::transmute::<&mut [Cell; WIDTH], &mut [u8; WIDTH]>(
+                                    receive_top,
+                                )
+                            },
+                        ),
+                    ));
+                }
+
+                if let Some(next_rank) = next_rank {
+                    guards.push(WaitGuard::from(
+                        world
+                            .process_at_rank(next_rank)
+                            .immediate_send(scope, unsafe {
+                                std::mem::transmute::<&mut [Cell; WIDTH], &mut [u8; WIDTH]>(
+                                    &mut grid_a[height - 1],
+                                )
+                            }),
+                    ));
+                    guards.push(WaitGuard::from(
+                        world
+                            .process_at_rank(next_rank)
+                            .immediate_receive_into(scope, unsafe {
+                                std::mem::transmute::<&mut [Cell; WIDTH], &mut [u8; WIDTH]>(
+                                    receive_bottom,
+                                )
+                            }),
+                    ));
+                }
+            });
         }
-        movement_bottom_row(
-            &sections[WIDTH - 2],
-            &sections[WIDTH - 1],
-            &mut sections_b[WIDTH - 1],
-        );
+        communication_duration += communication_time.elapsed();
 
-        // for cell in sections_b.iter_mut().flatten() {
-        //     cell.process_collision(round);
-        // }
+        let round_timer = Instant::now();
+        if previous_rank.is_some() {
+            movement_even_row(receive_top, &grid_a[0], &grid_a[1], &mut grid_b[0]);
+        } else {
+            movement_top_row(&grid_a[0], &grid_a[1], &mut grid_b[0]);
+        }
+        top_bottom_duration += round_timer.elapsed();
 
-        if round % 20 == 0 {
+        let round_timer = Instant::now();
+        grid_a
+            .par_windows(3)
+            .zip(grid_b.par_iter_mut().skip(1))
+            .enumerate()
+            .for_each(|(row_index, (context, result))| {
+                let above = &context[0];
+                let current = &context[1];
+                let below = &context[2];
+                if ((row_index + 1) % 2) == 0 {
+                    movement_even_row(above, current, below, result);
+                } else {
+                    movement_odd_row(above, current, below, result);
+                }
+            });
+
+        core_duration += round_timer.elapsed();
+
+        let round_timer = Instant::now();
+        if next_rank.is_some() {
+            movement_odd_row(
+                &grid_a[height - 2],
+                &grid_a[height - 1],
+                receive_bottom,
+                &mut grid_b[height - 1],
+            );
+        } else {
+            movement_bottom_row(
+                &grid_a[height - 2],
+                &grid_a[height - 1],
+                &mut grid_b[height - 1],
+            );
+        }
+        top_bottom_duration += round_timer.elapsed();
+
+        std::mem::swap(&mut grid_a, &mut grid_b);
+
+        let round_timer = Instant::now();
+        gif_time += time_per_round;
+        while gif_time >= time_per_frame {
+            gif_time -= time_per_frame;
             eprintln!("============================ Round {}", round);
-            images.push(draw_cells_detailed(sections_b).resized(
-                (WIDTH / 4) as u32 + 3,
-                (HEIGHT / 4) as u32 + 3,
+            images.push(draw_cells_detailed(grid_a).resized(
+                (WIDTH as f64 * image_scaling) as u32,
+                (height as f64 * image_scaling) as u32,
                 ril::ResizeAlgorithm::Lanczos3,
             ));
         }
-
-        std::mem::swap(&mut sections, &mut sections_b);
+        render_duration += round_timer.elapsed();
     }
 
-    let duration = time_before.elapsed();
-    eprintln!("Duration: {}", duration.as_secs_f64());
+    let calculation_duration = core_duration + top_bottom_duration;
+
+    let calculation_duration_per_cell =
+        (calculation_duration.as_secs_f64() * 1000000000.0) / (WIDTH * height * rounds) as f64;
+    let top_bottom_duration_per_cell =
+        (top_bottom_duration.as_secs_f64() * 1000000000.0) / (WIDTH * 2 * rounds) as f64;
+    let core_duration_per_cell =
+        (core_duration.as_secs_f64() * 1000000000.0) / (WIDTH * (height - 2) * rounds) as f64;
+
     eprintln!(
-        "Duration per round: {}",
-        duration.as_secs_f64() / ROUNDS as f64
+        "Calculation duration per round: {}",
+        calculation_duration.as_secs_f64() / rounds as f64
+    );
+    eprintln!(
+        "Top/bottom duration per cell: {} ns",
+        top_bottom_duration_per_cell
+    );
+    eprintln!("Core duration per cell: {} ns", core_duration_per_cell);
+    eprintln!(
+        "Calculation duration per cell: {} ns",
+        calculation_duration_per_cell
+    );
+    eprintln!(
+        "Calculation duration: {}",
+        calculation_duration.as_secs_f64()
+    );
+    eprintln!(
+        "Communication duration: {}",
+        communication_duration.as_secs_f64()
+    );
+    eprintln!("Render duration: {}", render_duration.as_secs_f64());
+    eprintln!(
+        "Total duration: {}",
+        (calculation_duration + communication_duration + render_duration).as_secs_f64()
+    );
+
+    println!(
+        "{},{},{},{},{},{},{},{}",
+        WIDTH,
+        height,
+        rounds,
+        top_bottom_duration_per_cell,
+        core_duration_per_cell,
+        calculation_duration_per_cell,
+        communication_duration.as_secs_f64(),
+        calculation_duration.as_secs_f64()
     );
 
     let mut output = ImageSequence::<Rgb>::new();
@@ -179,9 +338,13 @@ fn main() {
     // ImageSequence::open is lazy
     for frame in images {
         let mut frame = Frame::from_image(frame);
-        frame.set_delay(Duration::from_millis(15));
+        frame.set_delay(time_per_frame);
         output.push_frame(frame);
     }
 
-    output.save_inferred("inverted.gif").unwrap();
+    eprintln!("Saving output to {}", filename);
+    output.save_inferred(filename).unwrap();
+
+    let thing = mpi_universe.as_ref().map_or(0, |o| o.0.world().rank());
+    eprintln!("Hello, world! {}", thing);
 }

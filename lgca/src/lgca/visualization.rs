@@ -1,46 +1,6 @@
-use std::{arch::x86_64, cell};
-
 use ril::{Image, Rgb, TrueColor};
-use tincture::Oklch;
 
 use super::Cell;
-
-pub fn print_section<const WIDTH: usize, const HEIGHT: usize>(section: &[Cell; WIDTH * HEIGHT])
-where
-    [(); WIDTH * HEIGHT]:,
-{
-    for (index, row) in section.array_chunks::<WIDTH>().enumerate() {
-        if (index % 2) == 0 {
-            for cell in row {
-                eprint!(" ");
-                eprint!("{:?}", cell.get_particles());
-            }
-        } else {
-            for cell in row {
-                eprint!("{:?}", cell.get_particles());
-                eprint!(" ");
-            }
-        }
-        eprintln!();
-    }
-}
-
-pub fn draw_image() {
-    let mut image = Image::new(100, 100, Rgb::black());
-    let data = [[
-        Rgb::from_rgb_tuple((255, 0, 0)),
-        Rgb::from_rgb_tuple((0, 255, 0)),
-        Rgb::from_rgb_tuple((0, 0, 255)),
-    ]; 3];
-
-    for (x, row) in data.iter().enumerate() {
-        for (y, pixel) in row.iter().enumerate() {
-            image.set_pixel(x as u32, y as u32, *pixel);
-        }
-    }
-
-    image.save_inferred("sample_on_black.png").unwrap();
-}
 
 pub fn get_direction_of_cells(cells: &[&Cell]) -> (f32, f32) {
     let mut x: f32 = 0.0;
@@ -104,12 +64,7 @@ pub fn cells_to_color(cells: &[&Cell]) -> Rgb {
 pub fn cell_to_color(cell: &Cell) -> Rgb {
     let (angle, length) = cell.get_direction();
     let particles = cell.get_particles();
-    let lightness = match particles {
-        0 => 0.0,
-        1 => 0.5,
-        2 => 1.0,
-        _ => 0.0,
-    };
+
     use hsl::HSL;
 
     let color = HSL {
@@ -126,7 +81,7 @@ pub fn cell_to_color(cell: &Cell) -> Rgb {
 }
 
 pub fn draw_cells_detailed<const WIDTH: usize>(cells: &[[Cell; WIDTH]]) -> Image<Rgb> {
-    let mut image = Image::new(cells.len() as u32, WIDTH as u32, Rgb::black());
+    let mut image = Image::new(WIDTH as u32, cells.len() as u32, Rgb::black());
 
     for (y, row) in cells.iter().enumerate() {
         for (x, pixel) in row.iter().enumerate() {
@@ -136,6 +91,7 @@ pub fn draw_cells_detailed<const WIDTH: usize>(cells: &[[Cell; WIDTH]]) -> Image
     return image;
 }
 
+#[allow(dead_code)]
 pub fn draw_cells_b<const WIDTH: usize>(cells: &[[Cell; WIDTH]]) -> Image<Rgb> {
     let mut image = Image::new(cells.len() as u32, WIDTH as u32, Rgb::black());
 
@@ -147,6 +103,7 @@ pub fn draw_cells_b<const WIDTH: usize>(cells: &[[Cell; WIDTH]]) -> Image<Rgb> {
     return image;
 }
 
+#[allow(dead_code)]
 pub fn draw_cells_c<const WIDTH: usize>(cells: &[[Cell; WIDTH]]) -> Image<Rgb> {
     let mut image = Image::new(cells.len() as u32 / 4, WIDTH as u32 / 4, Rgb::black());
 

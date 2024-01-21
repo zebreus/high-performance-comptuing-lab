@@ -1,17 +1,15 @@
-use std::fmt::Debug;
+use std::{cell::RefCell, fmt::Debug};
 
+// tag::direction_consts[]
 pub const TO_WEST: u8 = 0b0000_0001;
 pub const TO_NORTH_WEST: u8 = 0b00000010;
 pub const TO_NORTH_EAST: u8 = 0b00000100;
 pub const TO_EAST: u8 = 0b00001000;
 pub const TO_SOUTH_EAST: u8 = 0b00010000;
 pub const TO_SOUTH_WEST: u8 = 0b00100000;
+// end::direction_consts[]
 
 use rand::prelude::*;
-
-// const CANCEL_EAST_WEST: u8 = TO_WEST | TO_EAST;
-// const CANCEL_NORTH_EAST_SOUTH_WEST: u8 = TO_NORTH_EAST | TO_SOUTH_WEST;
-// const CANCEL_NORTH_WEST_SOUTH_EAST: u8 = TO_NORTH_EAST | TO_SOUTH_WEST;
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Cell {
@@ -32,28 +30,13 @@ impl Debug for Cell {
     }
 }
 
+// thread_local! {
+thread_local!(pub static RNG: RefCell<SmallRng> = RefCell::new(SmallRng::from_entropy()));
+// }
+
 impl Cell {
     pub fn new() -> Self {
         Self { raw: 0 }
-    }
-
-    pub fn receive_from_west(&mut self, other: &Cell) {
-        self.raw |= other.raw & TO_EAST;
-    }
-    pub fn receive_from_north_west(&mut self, other: &Cell) {
-        self.raw |= other.raw & TO_SOUTH_EAST;
-    }
-    pub fn receive_from_north_east(&mut self, other: &Cell) {
-        self.raw |= other.raw & TO_SOUTH_WEST;
-    }
-    pub fn receive_from_east(&mut self, other: &Cell) {
-        self.raw |= other.raw & TO_WEST;
-    }
-    pub fn receive_from_south_east(&mut self, other: &Cell) {
-        self.raw |= other.raw & TO_NORTH_WEST;
-    }
-    pub fn receive_from_south_west(&mut self, other: &Cell) {
-        self.raw |= other.raw & TO_NORTH_EAST;
     }
 
     pub fn to_east(&self) -> bool {
@@ -156,32 +139,32 @@ impl Cell {
         self.raw.count_ones() as u8
     }
 
+    // tag::collision_real[]
     pub fn process_collision(&mut self) {
-        let mut rng = rand::thread_rng();
-        let rand_bool = rng.gen();
         self.raw = match self.raw {
             // Two opposing particles
             const { TO_WEST | TO_EAST } => {
-                if rand_bool {
+                if RNG.with(|f| f.borrow_mut().gen::<bool>()) {
                     TO_NORTH_EAST | TO_SOUTH_WEST
                 } else {
                     TO_SOUTH_EAST | TO_NORTH_WEST
                 }
             }
             const { TO_SOUTH_EAST | TO_NORTH_WEST } => {
-                if rand_bool {
+                if RNG.with(|f| f.borrow_mut().gen::<bool>()) {
                     TO_NORTH_EAST | TO_SOUTH_WEST
                 } else {
                     TO_EAST | TO_WEST
                 }
             }
             const { TO_SOUTH_WEST | TO_NORTH_EAST } => {
-                if rand_bool {
+                if RNG.with(|f| f.borrow_mut().gen::<bool>()) {
                     TO_SOUTH_EAST | TO_NORTH_WEST
                 } else {
                     TO_EAST | TO_WEST
                 }
             }
+
             // Three particles
             const { TO_SOUTH_WEST | TO_NORTH_WEST | TO_EAST } => {
                 TO_SOUTH_EAST | TO_NORTH_EAST | TO_WEST
@@ -192,21 +175,21 @@ impl Cell {
 
             // Four particles with opposing holes
             0b00110110 => {
-                if rand_bool {
+                if RNG.with(|f| f.borrow_mut().gen::<bool>()) {
                     0b00011011
                 } else {
                     0b00101101
                 }
             }
             0b00011011 => {
-                if rand_bool {
+                if RNG.with(|f| f.borrow_mut().gen::<bool>()) {
                     0b00101101
                 } else {
                     0b00110110
                 }
             }
             0b00101101 => {
-                if rand_bool {
+                if RNG.with(|f| f.borrow_mut().gen::<bool>()) {
                     0b00011011
                 } else {
                     0b00110110
@@ -217,134 +200,12 @@ impl Cell {
             _ => self.raw,
         }
     }
-
-    // pub fn process_collision(&mut self, seed: u32) {
-    //     let rand_bool = seed & 1 == 1;
-    //     self.raw = match self.raw {
-    //         // Two opposing particles
-    //         0b00001001 => {
-    //             if rand_bool {
-    //                 0b00100100
-    //             } else {
-    //                 0b00010010
-    //             }
-    //         }
-    //         0b00010010 => {
-    //             if rand_bool {
-    //                 0b00100100
-    //             } else {
-    //                 0b00001001
-    //             }
-    //         }
-    //         0b00100100 => {
-    //             if rand_bool {
-    //                 0b00010010
-    //             } else {
-    //                 0b00001001
-    //             }
-    //         }
-    //         // Three particles
-    //         0b00101010 => 0b00010101,
-    //         0b00010101 => 0b00101010,
-
-    //         // Four particles with opposing holes
-    //         0b00110110 => {
-    //             if rand_bool {
-    //                 0b00011011
-    //             } else {
-    //                 0b00101101
-    //             }
-    //         }
-    //         0b00011011 => {
-    //             if rand_bool {
-    //                 0b00101101
-    //             } else {
-    //                 0b00110110
-    //             }
-    //         }
-    //         0b00101101 => {
-    //             if rand_bool {
-    //                 0b00011011
-    //             } else {
-    //                 0b00110110
-    //             }
-    //         }
-
-    //         // Everything else
-    //         _ => self.raw,
-    //     }
-    // }
+    // end::collision_real[]
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_receive_from_west() {
-        let mut cell = Cell::new();
-        let mut other = Cell::new();
-        cell.raw = TO_WEST;
-        other.raw = TO_EAST;
-        cell.receive_from_west(&other);
-        assert_eq!(cell.to_east(), true, "Content is {:?}", cell);
-        assert_eq!(cell.to_west(), true, "Content is {:?}", cell);
-    }
-
-    #[test]
-    fn test_receive_from_north_west() {
-        let mut cell = Cell::new();
-        let mut other = Cell::new();
-        cell.raw = TO_NORTH_WEST;
-        other.raw = TO_SOUTH_EAST;
-        cell.receive_from_north_west(&other);
-        assert_eq!(cell.to_south_east(), true, "Content is {:?}", cell);
-        assert_eq!(cell.to_north_west(), true, "Content is {:?}", cell);
-    }
-
-    #[test]
-    fn test_receive_from_north_east() {
-        let mut cell = Cell::new();
-        let mut other = Cell::new();
-        cell.raw = TO_NORTH_EAST;
-        other.raw = TO_SOUTH_WEST;
-        cell.receive_from_north_east(&other);
-        assert_eq!(cell.to_south_west(), true, "Content is {:?}", cell);
-        assert_eq!(cell.to_north_east(), true, "Content is {:?}", cell);
-    }
-
-    #[test]
-    fn test_receive_from_east() {
-        let mut cell = Cell::new();
-        let mut other = Cell::new();
-        cell.raw = TO_EAST;
-        other.raw = TO_WEST;
-        cell.receive_from_east(&other);
-        assert_eq!(cell.to_west(), true, "Content is {:?}", cell);
-        assert_eq!(cell.to_east(), true, "Content is {:?}", cell);
-    }
-
-    #[test]
-    fn test_receive_from_south_east() {
-        let mut cell = Cell::new();
-        let mut other = Cell::new();
-        cell.raw = TO_SOUTH_EAST;
-        other.raw = TO_NORTH_WEST;
-        cell.receive_from_south_east(&other);
-        assert_eq!(cell.to_north_west(), true, "Content is {:?}", cell);
-        assert_eq!(cell.to_south_east(), true, "Content is {:?}", cell);
-    }
-
-    #[test]
-    fn test_receive_from_south_west() {
-        let mut cell = Cell::new();
-        let mut other = Cell::new();
-        cell.raw = TO_SOUTH_WEST;
-        other.raw = TO_NORTH_EAST;
-        cell.receive_from_south_west(&other);
-        assert_eq!(cell.to_north_east(), true, "Content is {:?}", cell);
-        assert_eq!(cell.to_south_west(), true, "Content is {:?}", cell);
-    }
 
     #[test]
     fn test_process_collision() {

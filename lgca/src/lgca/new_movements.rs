@@ -4,7 +4,10 @@ use super::{
 };
 
 /// Calculate the movements for the core of a section
+/// Higly optimized, but not very readable.
+/// This should work really well with autovectorization, best use a CPU with AVX512
 #[inline(never)]
+// tag::movement_core_function[]
 pub fn movement_core<const WIDTH: usize>(
     above: &[Cell; WIDTH - 1],
     current: &[Cell; WIDTH],
@@ -22,69 +25,71 @@ pub fn movement_core<const WIDTH: usize>(
             (([north_west, north_east], [west, _current, east]), [south_west, south_east]),
             result,
         )| {
-            let mut temp = (west.raw & TO_EAST)
+            // tag::movement_core[]
+            let mut new_cell = (west.raw & TO_EAST)
                 | (north_west.raw & TO_SOUTH_EAST)
                 | (north_east.raw & TO_SOUTH_WEST)
                 | (east.raw & TO_WEST)
                 | (south_east.raw & TO_NORTH_WEST)
                 | (south_west.raw & TO_NORTH_EAST);
-            // let mut temp = (west.raw & 0b00000001)
-            //     | (north_west.raw & 0b00000010)
-            //     | (north_east.raw & 0b00000100)
-            //     | (east.raw & 0b00001000)
-            //     | (south_east.raw & 0b00010000)
-            //     | (south_west.raw & 0b00100000);
-            result.raw = temp;
+            // end::movement_core[]
+
+            result.raw = new_cell;
             // result.process_collision();
-            if (temp == 0b00100100) && (south_east.raw & 0b00010000 == 0) {
+            // tag::collision_fake[]
+            if (new_cell == 0b00100100) && (south_east.raw & 0b00010000 == 0) {
                 result.raw = 0b00010010;
             }
-            if (temp == 0b00100100) && (south_east.raw & 0b00010000 != 0) {
+            if (new_cell == 0b00100100) && (south_east.raw & 0b00010000 != 0) {
                 result.raw = 0b00001001;
             }
-            if (temp == 0b00011011) && (south_east.raw & 0b00010000 == 0) {
+            if (new_cell == 0b00011011) && (south_east.raw & 0b00010000 == 0) {
                 result.raw = 0b00101101;
             }
-            if (temp == 0b00011011) && (south_east.raw & 0b00010000 != 0) {
+            if (new_cell == 0b00011011) && (south_east.raw & 0b00010000 != 0) {
                 result.raw = 0b00110110;
             }
 
-            if temp == 0b00010010 && (east.raw & 0b00001000 == 0) {
+            if new_cell == 0b00010010 && (east.raw & 0b00001000 == 0) {
                 result.raw = 0b00001001;
             }
-            if temp == 0b00010010 && (east.raw & 0b00001000 != 0) {
+            if new_cell == 0b00010010 && (east.raw & 0b00001000 != 0) {
                 result.raw = 0b00100100;
             }
-            if temp == 0b00101101 && (east.raw & 0b00001000 == 0) {
+            if new_cell == 0b00101101 && (east.raw & 0b00001000 == 0) {
                 result.raw = 0b00110110;
             }
-            if temp == 0b00101101 && (east.raw & 0b00001000 != 0) {
+            if new_cell == 0b00101101 && (east.raw & 0b00001000 != 0) {
                 result.raw = 0b00011011;
             }
 
-            if temp == 0b00001001 && (north_east.raw & 0b00000100 == 0) {
+            if new_cell == 0b00001001 && (north_east.raw & 0b00000100 == 0) {
                 result.raw = 0b00100100;
             }
-            if temp == 0b00001001 && (north_east.raw & 0b00000100 != 0) {
+            if new_cell == 0b00001001 && (north_east.raw & 0b00000100 != 0) {
                 result.raw = 0b00010010;
             }
-            if temp == 0b00110110 && (north_east.raw & 0b00000100 == 0) {
+            if new_cell == 0b00110110 && (north_east.raw & 0b00000100 == 0) {
                 result.raw = 0b00011011;
             }
-            if temp == 0b00110110 && (north_east.raw & 0b00000100 != 0) {
+            if new_cell == 0b00110110 && (north_east.raw & 0b00000100 != 0) {
                 result.raw = 0b00101101;
             }
 
-            if temp == 0b00101010 {
+            if new_cell == 0b00101010 {
                 result.raw = 0b00010101;
             }
-            if temp == 0b00010101 {
+            if new_cell == 0b00010101 {
                 result.raw = 0b00101010;
             }
-            temp = result.raw; // This line does nothing, but autovectorization breaks without it
+            // end::collision_fake[]
+
+            #[allow(unused_assignments)]
+            new_cell = result.raw; // This line does nothing, but autovectorization breaks without it
         },
-    )
+    );
 }
+// end::movement_core_function[]
 
 /// Calculate the movement of the core of the top row
 fn movement_core_top<const WIDTH: usize>(
@@ -183,6 +188,7 @@ pub fn movement_top_row<const WIDTH: usize>(
     [(); WIDTH - 1]:,
     [(); WIDTH - 2]:,
 {
+    // tag::top_right_movement_implementation[]
     // Handle border of first cell
     result[0].raw = (below[0].raw & TO_NORTH_EAST)
         | (below[1].raw & TO_NORTH_WEST)
@@ -190,6 +196,7 @@ pub fn movement_top_row<const WIDTH: usize>(
         | ((current[0].raw & TO_NORTH_EAST) << 2)
         | ((current[0].raw & TO_NORTH_WEST) << 4)
         | ((current[0].raw & TO_WEST) << 3);
+    // end::top_right_movement_implementation[]
     result[0].process_collision();
 
     // Handle core
@@ -291,29 +298,29 @@ pub fn movement_bottom_row<const WIDTH: usize>(
     result[WIDTH - 1].process_collision();
 }
 
-pub fn print_section<const WIDTH: usize>(section: &[[Cell; WIDTH]])
-where
-    [(); WIDTH]:,
-{
-    for (index, row) in section.iter().enumerate() {
-        if (index % 2) == 0 {
-            for cell in row.iter() {
-                eprint!(" ");
-                eprint!("{:?}", cell.get_particles());
-            }
-        } else {
-            for cell in row.iter() {
-                eprint!("{:?}", cell.get_particles());
-                eprint!(" ");
-            }
-        }
-        eprintln!();
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    pub fn print_section<const WIDTH: usize>(section: &[[Cell; WIDTH]])
+    where
+        [(); WIDTH]:,
+    {
+        for (index, row) in section.iter().enumerate() {
+            if (index % 2) == 0 {
+                for cell in row.iter() {
+                    eprint!(" ");
+                    eprint!("{:?}", cell.get_particles());
+                }
+            } else {
+                for cell in row.iter() {
+                    eprint!("{:?}", cell.get_particles());
+                    eprint!(" ");
+                }
+            }
+            eprintln!();
+        }
+    }
 
     #[test]
     fn even_rows_on_east_and_west() {

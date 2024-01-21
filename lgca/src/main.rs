@@ -95,7 +95,7 @@ fn main() {
     let rounds_per_second = cli.speed;
     let frames_per_second = cli.framerate;
     let time_per_round = Duration::from_secs_f64(1.0 / rounds_per_second as f64);
-    let time_per_frame = Duration::from_secs_f64(1.0 / frames_per_second as f64);
+    let time_per_frame = Duration::from_secs_f64(1.0 / (frames_per_second as f64).max(1.0));
     let height = (cli.height.div_ceil(size as usize)) * size as usize;
     let filepath = cli.output_directory.join(format!("output_{}.webp", rank));
     let filename = filepath.to_str().unwrap();
@@ -156,11 +156,13 @@ fn main() {
     }
     eprintln!("============================ Round 0");
     let mut images: Vec<Image<Rgb>> = Vec::new();
-    images.push(draw_cells_detailed(grid_a).resized(
-        (WIDTH as f64 * image_scaling) as u32,
-        (height as f64 * image_scaling) as u32,
-        ril::ResizeAlgorithm::Lanczos3,
-    ));
+    if frames_per_second != 0 {
+        images.push(draw_cells_detailed(grid_a).resized(
+            (WIDTH as f64 * image_scaling) as u32,
+            (height as f64 * image_scaling) as u32,
+            ril::ResizeAlgorithm::Lanczos3,
+        ));
+    }
     let mut top_bottom_duration: Duration = Duration::new(0, 0);
     let mut core_duration: Duration = Duration::new(0, 0);
     let mut communication_duration: Duration = Duration::new(0, 0);
@@ -271,6 +273,9 @@ fn main() {
 
         std::mem::swap(&mut grid_a, &mut grid_b);
 
+        if frames_per_second == 0 {
+            continue;
+        }
         let round_timer = Instant::now();
         gif_time += time_per_round;
         while gif_time >= time_per_frame {
@@ -333,18 +338,18 @@ fn main() {
         calculation_duration.as_secs_f64()
     );
 
-    let mut output = ImageSequence::<Rgb>::new();
+    if frames_per_second != 0 {
+        let mut output = ImageSequence::<Rgb>::new();
 
-    // ImageSequence::open is lazy
-    for frame in images {
-        let mut frame = Frame::from_image(frame);
-        frame.set_delay(time_per_frame);
-        output.push_frame(frame);
+        // ImageSequence::open is lazy
+        for frame in images {
+            let mut frame = Frame::from_image(frame);
+            frame.set_delay(time_per_frame);
+            output.push_frame(frame);
+        }
+
+        eprintln!("Saving output to {}", filename);
+        output.save_inferred(filename).unwrap();
     }
-
-    eprintln!("Saving output to {}", filename);
-    output.save_inferred(filename).unwrap();
-
-    let thing = mpi_universe.as_ref().map_or(0, |o| o.0.world().rank());
-    eprintln!("Hello, world! {}", thing);
+    let _ = mpi_universe.as_ref().map_or(0, |o| o.0.world().rank());
 }

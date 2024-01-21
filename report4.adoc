@@ -58,7 +58,249 @@ The following requirements are given by the lab instructions:
 
 === Implementation
 
-Our hex grid will use even-row offset coordinates. It is divided into multiple "rectangular" sections that are distributed to different nodes. Each node will run use multithreading to process the movements of particles in its sections and then send the particles that left its section to the node responsible for that section. Then each node will process the collisions of the particles in its section. Repeat until the simulation is done.
+We will store the hexagons row-wise in an odd-q vertical layout:
+
+image::assets/hexagon-layout.png[Hexagon grid]
+
+Each row will be processed independendly from each other. Every cell is stored in a single byte with one bit for each direction. The first bit is the north-east direction, the second bit is the east direction, and so on. The last bit is unused. The first byte of each row is the north-east corner of the row. The first byte of the second row is the north-east corner of the second row, and so on. The last byte of each row is the south-east corner of the row. The last byte of the second row is the south-east corner of the second row, and so on. The last byte of the last row is the south-east corner of the last row.
+
+// packetdiag
+[packetdiag]
+....
+packetdiag {
+  node_height = 72;
+  node_width = 90;
+
+  0: WEST;
+  1: NORTH_WEST;
+  2: NORTH_EAST;
+  3: EAST;
+  4: SOUTH_EAST;
+  5: SOUTH_WEST;
+  6-7: unused;
+}
+....
+
+To calculate the next state of a cell, we need to look at all of its neighbouring cells and move the particles into the current cell. 
+
+.Movement calculation
+[source#movement_implementation.linenums,cpp]
+----
+*current = (west & 0b00000001)
+         | (north_west & 0b00000010)
+         | (north_east & 0b00000100)
+         | (east & 0b00001000)
+         | (south_east & 0b00010000)
+         | (south_west & 0b00100000);
+----
+
+
+As the GSI has machines that support AVX512 SIMD instructions we want to write code that can be autovectorized by the rust compiler. We used https://godbolt.org to view the generated machine code and make sure that our implementation supports AVX512. 
+
+The movement step will be vectorized to something like this:
+
+.Movement calculation (shortened)
+[source#movement_assembly.linenums,assembly]
+----
+.LCPI0_28:
+        .byte   2
+.LCPI0_29:
+        .byte   1
+.LCPI0_30:
+        .byte   4
+.LCPI0_31:
+        .byte   8
+.LCPI0_32:
+        .byte   16
+.LCPI0_33:
+        .byte   32
+
+calculate_movement:
+        ...
+        vpbroadcastb    zmm0, byte ptr [rip + .LCPI0_28]
+        vpbroadcastb    zmm1, byte ptr [rip + .LCPI0_29]
+        vpbroadcastb    zmm2, byte ptr [rip + .LCPI0_30]
+        vpbroadcastb    zmm3, byte ptr [rip + .LCPI0_31]
+        vpbroadcastb    zmm4, byte ptr [rip + .LCPI0_32]
+        vpbroadcastb    zmm5, byte ptr [rip + .LCPI0_33]
+.LBB0_1:
+        vpandq          zmm14, zmm0, zmmword ptr [rdi + rax]
+        vpternlogq      zmm14, zmm1, zmmword ptr [rsi + rax], 248
+        vpternlogq      zmm14, zmm2, zmmword ptr [rdi + rax + 1], 248
+        vpternlogq      zmm14, zmm3, zmmword ptr [rsi + rax + 2], 248
+        vpternlogq      zmm14, zmm4, zmmword ptr [rdx + rax + 1], 248
+        vpternlogq      zmm14, zmm5, zmmword ptr [rdx + rax], 248
+        add     rax, 64
+        cmp     rax, 4928
+        jne     .LBB0_1
+        ...
+        ret
+----
+
+After the movement step, we process the collisions. The rules for the collisions are quite simple:
+
+* If a cell only has two particles traveling in opposite directions, they will rotate by either 60°.
+* If a cell has three particles traveling in opposite directions, they will rotate by 60°.
+* If a cell has exactly four particles with two pairs of opposite directions, they will rotate by 60°.
+
+This can be implemented with the following match statement:
+
+.Collision calculation using match
+[source#collision_implementation.linenums,rust]
+----
+pub fn process_collision(number: u8) -> u8 {
+    match number {
+        // Two opposing particles
+        0b00001001 => 0b00100100,
+        0b00010010 => 0b00001001,
+        0b00100100 => 0b00010010,
+          
+        // Three particles
+        0b00101010 => 0b00010101,
+        0b00010101 => 0b00101010,
+
+        // Four particles with opposing holes
+        0b00110110 => 0b00011011,
+        0b00011011 => 0b00101101,
+        0b00101101 => 0b00011011,
+
+        // Everything else
+        x => x,
+    }
+}
+----
+
+However when we look at the generated assembly, we see that the match statement is not autovectorized. Instead the compiler generates a jump table and uses a scalar comparison to find the correct branch. This is not ideal, as we want to use the AVX512 instructions to process multiple cells at once. We found that the most reliable way to get autovectoriztation is to use multiple simple if statements that can be implemented with a
+
+.Collision calculation using if statements
+[source#collision_implementation_if.linenums,rust]
+----
+    if *result == 0b00101010 {
+        *result = 0b00010101;
+    }
+    if *result == 0b00010101 {
+        *result = 0b00101010;
+    }
+    if *result == 0b00100100 {
+        *result = 0b00010010;
+    }
+    if *result == 0b00010010 {
+        *result = 0b00001001;
+    }
+    if *result == 0b00001001  {
+        *result = 0b00100100;
+    }
+    if *result == 0b00110110  {
+        *result = 0b00011011;
+    }
+    if *result == 0b00101101 {
+        *result = 0b00110110;
+    }
+    if *result == 0b00011011 {
+        *result = 0b00101101;
+    }
+----
+
+results in the following assembly:
+
+.Movement calculation (shortened)
+[source#movement_assembly.linenums,assembly]
+----
+.LCPI0_34:
+        .byte   42
+.LCPI0_35:
+        .byte   21
+.LCPI0_36:
+        .byte   36
+.LCPI0_37:
+        .byte   18
+.LCPI0_38:
+        .byte   9
+.LCPI0_39:
+        .byte   54
+.LCPI0_40:
+        .byte   27
+.LCPI0_41:
+        .byte   45
+
+process_collisions:
+        ...
+        vpbroadcastb    zmm6, byte ptr [rip + .LCPI0_34]
+        vpbroadcastb    zmm7, byte ptr [rip + .LCPI0_35]
+        vpbroadcastb    zmm8, byte ptr [rip + .LCPI0_36]
+        vpbroadcastb    zmm9, byte ptr [rip + .LCPI0_37]
+        vpbroadcastb    zmm10, byte ptr [rip + .LCPI0_38]
+        vpbroadcastb    zmm11, byte ptr [rip + .LCPI0_39]
+        vpbroadcastb    zmm12, byte ptr [rip + .LCPI0_40]
+        vpbroadcastb    zmm13, byte ptr [rip + .LCPI0_41]
+        ...
+.LBB0_1:
+        ... ; zmm14 contains 64 cells
+        vpcmpeqb        k1, zmm14, zmm6
+        vmovdqu8        zmm14 {k1}, zmm7
+        vpcmpeqb        k1, zmm14, zmm7
+        vmovdqu8        zmm14 {k1}, zmm6
+        vpcmpeqb        k1, zmm14, zmm8
+        vmovdqu8        zmm14 {k1}, zmm9
+        vpcmpeqb        k1, zmm14, zmm9
+        vmovdqu8        zmm14 {k1}, zmm10
+        vpcmpeqb        k1, zmm14, zmm10
+        vmovdqu8        zmm14 {k1}, zmm8
+        vpcmpeqb        k1, zmm14, zmm11
+        vmovdqu8        zmm14 {k1}, zmm12
+        vpcmpeqb        k1, zmm14, zmm13
+        vmovdqu8        zmm14 {k1}, zmm11
+        vpcmpeqb        k1, zmm14, zmm12
+        vmovdqu8        zmm14 {k1}, zmm13
+        add     rax, 64
+        cmp     rax, 4928
+        jne     .LBB0_1
+        ...
+        ret
+----
+
+However this implementation still has a few logic bugs. For example the case with three particles will be rotated twice, as the first if statement will match and then the second if statement will match. We tried multiple ways to fix it, the ones below all broke auto vectorization:
+* Using a match statement with a guard clause
+* Using if else statements
+
+We ended up assigning the value of the cell to a temporary variable and using that as the basis for comparison. This way the result of the previous if statement is not used as the input for the next if statement. For some reason auto vectorization breaks when we dont reassing the value to a temporary variable.
+
+[source#collision_implementation_if.linenums,rust]
+----
+*result = temp;
+if temp == 0b00100100 {
+    *result = 0b00010010;
+}
+if temp == 0b00010010 {
+    *result = 0b00001001;
+}
+if temp == 0b00001001  {
+    *result = 0b00100100;
+}
+if temp == 0b00101010 {
+    *result = 0b00010101;
+}
+if temp == 0b00010101 {
+    *result = 0b00101010;
+}
+temp = *result;
+if temp == 0b00110110  {
+    *result = 0b00011011;
+}
+if temp == 0b00101101 {
+    *result = 0b00110110;
+}
+if temp == 0b00011011 {
+    *result = 0b00101101;
+}
+----
+
+This implementation always turns to the right on collisions. Implementing true randomness without sacrificing performance is not trivial. As a workaround, we adjusted our algorithm to
+
+Duration per round with real random: 0.5
+Duration per round without collisions: 0.15
+Duration with fast collisions: 0.15
+Duration with real collisions during movement: 1.2
 
 === Results
 
@@ -68,47 +310,6 @@ Our results will focus on the following three questions from the exercise sheet:
 * Determine the empirical relationship between the number of processors and the performance, and between the size of the lattice and the performance.
 * What is the largest lattice which you can simulate?
 
-.Server flow
-[nomnoml#server-flow,opts=inline,width=22cm]
-....
-#.box: fill=#8f8 dashed
-
-
-[<start> start]->
-[Read block of unsorted data]->[Split into 256 buckets;based on the first byte]->
-[Send each bucket to responsible worker; _;
-worker = firstByte % numberOfWorkers]->
-[<choice> Unsorted data left?]yes->[Read block of unsorted data]
-[<choice> Unsorted data left?]no ->[Send done to each worker]->
-[<box> Finished reading]->
-[Create 256 empty lists]->
-[Receive message from any worker]->[<choice> Is done message?]yes ->[<choice> Are all workers done]
-[<choice> Is done message?]no ->
-[Insert data into the correct list based on its prefix] ->[Receive message from any worker]
-
-
-[<choice> Are all workers done]no -> [Receive message from any worker]
-[<choice> Are all workers done]yes ->[Concatenate the 256 sorted lists and write them in a file]->
-[<end> end]
-....
-
-.Client flow
-[nomnoml#client-flow]
-....
-#.box: fill=#8f8 dashed
-
-[<start> start client]->
-[Create 256 empty lists]->
-[Receive message]->[<choice> Is done message?]no ->
-[Sort received data]->[Merge into the list with the same prefix]->[Receive message]
-
-[<choice> Is done message?]yes ->
-[<box> Finished reading]->
-[Discard empty buckets]->[Send next bucket to server]->[<choice> Buckets left?]yes ->[Send next bucket to server]
-[<choice> Buckets left?]no ->
-[Send done message]->
-[<end> client]
-....
 
 === Measurements
 

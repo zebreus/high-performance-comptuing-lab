@@ -4,7 +4,8 @@ use super::{
 };
 
 /// Calculate the movements for the core of a section
-fn movement_core<const WIDTH: usize>(
+#[inline(never)]
+pub fn movement_core<const WIDTH: usize>(
     above: &[Cell; WIDTH - 1],
     current: &[Cell; WIDTH],
     below: &[Cell; WIDTH - 1],
@@ -21,12 +22,66 @@ fn movement_core<const WIDTH: usize>(
             (([north_west, north_east], [west, _current, east]), [south_west, south_east]),
             result,
         )| {
-            result.raw = (west.raw & TO_EAST)
+            let mut temp = (west.raw & TO_EAST)
                 | (north_west.raw & TO_SOUTH_EAST)
                 | (north_east.raw & TO_SOUTH_WEST)
                 | (east.raw & TO_WEST)
                 | (south_east.raw & TO_NORTH_WEST)
                 | (south_west.raw & TO_NORTH_EAST);
+            // let mut temp = (west.raw & 0b00000001)
+            //     | (north_west.raw & 0b00000010)
+            //     | (north_east.raw & 0b00000100)
+            //     | (east.raw & 0b00001000)
+            //     | (south_east.raw & 0b00010000)
+            //     | (south_west.raw & 0b00100000);
+            result.raw = temp;
+            // result.process_collision();
+            if (temp == 0b00100100) && (south_east.raw & 0b00010000 == 0) {
+                result.raw = 0b00010010;
+            }
+            if (temp == 0b00100100) && (south_east.raw & 0b00010000 != 0) {
+                result.raw = 0b00001001;
+            }
+            if (temp == 0b00011011) && (south_east.raw & 0b00010000 == 0) {
+                result.raw = 0b00101101;
+            }
+            if (temp == 0b00011011) && (south_east.raw & 0b00010000 != 0) {
+                result.raw = 0b00110110;
+            }
+
+            if temp == 0b00010010 && (east.raw & 0b00001000 == 0) {
+                result.raw = 0b00001001;
+            }
+            if temp == 0b00010010 && (east.raw & 0b00001000 != 0) {
+                result.raw = 0b00100100;
+            }
+            if temp == 0b00101101 && (east.raw & 0b00001000 == 0) {
+                result.raw = 0b00110110;
+            }
+            if temp == 0b00101101 && (east.raw & 0b00001000 != 0) {
+                result.raw = 0b00011011;
+            }
+
+            if temp == 0b00001001 && (north_east.raw & 0b00000100 == 0) {
+                result.raw = 0b00100100;
+            }
+            if temp == 0b00001001 && (north_east.raw & 0b00000100 != 0) {
+                result.raw = 0b00010010;
+            }
+            if temp == 0b00110110 && (north_east.raw & 0b00000100 == 0) {
+                result.raw = 0b00011011;
+            }
+            if temp == 0b00110110 && (north_east.raw & 0b00000100 != 0) {
+                result.raw = 0b00101101;
+            }
+
+            if temp == 0b00101010 {
+                result.raw = 0b00010101;
+            }
+            if temp == 0b00010101 {
+                result.raw = 0b00101010;
+            }
+            temp = result.raw; // This line does nothing, but autovectorization breaks without it
         },
     )
 }
@@ -50,6 +105,7 @@ fn movement_core_top<const WIDTH: usize>(
                 | (east.raw & TO_WEST)
                 | (south_east.raw & TO_NORTH_WEST)
                 | (south_west.raw & TO_NORTH_EAST);
+            result.process_collision();
         },
     )
 }
@@ -71,8 +127,9 @@ fn movement_core_bottom<const WIDTH: usize>(
                 | (north_west.raw & TO_SOUTH_EAST)
                 | (north_east.raw & TO_SOUTH_WEST)
                 | (east.raw & TO_WEST)
-                | ((current.raw & TO_SOUTH_EAST) >> 3)
-                | ((current.raw & TO_SOUTH_WEST) >> 3);
+                | ((current.raw & TO_SOUTH_EAST) >> 2)
+                | ((current.raw & TO_SOUTH_WEST) >> 4);
+            result.process_collision();
         },
     )
 }
@@ -93,6 +150,7 @@ pub fn movement_even_row<const WIDTH: usize>(
         | (below[1].raw & TO_NORTH_WEST)
         | (current[1].raw & TO_WEST)
         | ((current[0].raw & TO_WEST) << 3);
+    result[0].process_collision();
 
     // Handle core
     movement_core(
@@ -113,6 +171,7 @@ pub fn movement_even_row<const WIDTH: usize>(
         | ((current[WIDTH - 1].raw & TO_EAST) >> 3)
         | ((current[WIDTH - 1].raw & TO_NORTH_EAST) >> 1)
         | ((current[WIDTH - 1].raw & TO_SOUTH_EAST) << 1);
+    result[WIDTH - 1].process_collision();
 }
 
 /// Top row is always even
@@ -128,9 +187,10 @@ pub fn movement_top_row<const WIDTH: usize>(
     result[0].raw = (below[0].raw & TO_NORTH_EAST)
         | (below[1].raw & TO_NORTH_WEST)
         | (current[1].raw & TO_WEST)
-        | ((current[0].raw & TO_NORTH_EAST) << 3)
-        | ((current[0].raw & TO_NORTH_WEST) << 3)
+        | ((current[0].raw & TO_NORTH_EAST) << 2)
+        | ((current[0].raw & TO_NORTH_WEST) << 4)
         | ((current[0].raw & TO_WEST) << 3);
+    result[0].process_collision();
 
     // Handle core
     movement_core_top(
@@ -150,6 +210,7 @@ pub fn movement_top_row<const WIDTH: usize>(
         | ((current[WIDTH - 1].raw & TO_EAST) >> 3)
         | ((current[WIDTH - 1].raw & TO_NORTH_EAST) << 3)
         | ((current[WIDTH - 1].raw & TO_SOUTH_EAST) >> 3);
+    result[WIDTH - 1].process_collision();
 }
 
 pub fn movement_odd_row<const WIDTH: usize>(
@@ -168,6 +229,7 @@ pub fn movement_odd_row<const WIDTH: usize>(
         | ((current[0].raw & TO_WEST) << 3)
         | ((current[0].raw & TO_NORTH_WEST) << 1)
         | ((current[0].raw & TO_SOUTH_WEST) >> 1);
+    result[0].process_collision();
 
     // Handle core
     movement_core(
@@ -188,6 +250,7 @@ pub fn movement_odd_row<const WIDTH: usize>(
         | (below[WIDTH - 1].raw & TO_NORTH_WEST)
         | (current[WIDTH - 2].raw & TO_EAST)
         | ((current[WIDTH - 1].raw & TO_EAST) >> 3);
+    result[WIDTH - 1].process_collision();
 }
 
 pub fn movement_bottom_row<const WIDTH: usize>(
@@ -205,6 +268,7 @@ pub fn movement_bottom_row<const WIDTH: usize>(
         | ((current[0].raw & TO_WEST) << 3)
         | ((current[0].raw & TO_NORTH_WEST) << 3)
         | ((current[0].raw & TO_SOUTH_WEST) >> 3);
+    result[0].process_collision();
 
     // Handle core
     movement_core_bottom(
@@ -222,8 +286,9 @@ pub fn movement_bottom_row<const WIDTH: usize>(
         | (above[WIDTH - 1].raw & TO_SOUTH_WEST)
         | (current[WIDTH - 2].raw & TO_EAST)
         | ((current[WIDTH - 1].raw & TO_EAST) >> 3)
-        | ((current[WIDTH - 1].raw & TO_SOUTH_EAST) >> 3)
-        | ((current[WIDTH - 1].raw & TO_SOUTH_WEST) >> 3);
+        | ((current[WIDTH - 1].raw & TO_SOUTH_EAST) >> 2)
+        | ((current[WIDTH - 1].raw & TO_SOUTH_WEST) >> 4);
+    result[WIDTH - 1].process_collision();
 }
 
 pub fn print_section<const WIDTH: usize>(section: &[[Cell; WIDTH]])
@@ -453,7 +518,7 @@ mod tests {
             );
 
             for cell in sections_b.iter_mut().flatten() {
-                cell.process_collision(round);
+                cell.process_collision();
             }
 
             eprintln!("============================ Round {}", round);

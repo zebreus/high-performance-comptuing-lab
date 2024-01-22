@@ -63,6 +63,10 @@ struct Cli {
     /// Number of rows (Divided by number of mpi ranks)
     #[arg(long, default_value_t = 1)]
     height: usize,
+
+    /// Size of the initially filled box
+    #[arg(long, default_value_t = 500)]
+    boxx: usize,
 }
 
 fn main() {
@@ -96,7 +100,7 @@ fn main() {
     let frames_per_second = cli.framerate;
     let time_per_round = Duration::from_secs_f64(1.0 / rounds_per_second as f64);
     let time_per_frame = Duration::from_secs_f64(1.0 / (frames_per_second as f64).max(1.0));
-    let height = (cli.height.div_ceil(size as usize)) * size as usize;
+    let height = (cli.height.div_ceil(size as usize).div_ceil(2)) * 2 as usize;
     let filepath = cli.output_directory.join(format!("output_{}.webp", rank));
     let filename = filepath.to_str().unwrap();
 
@@ -107,8 +111,7 @@ fn main() {
         std::fs::create_dir_all(&cli.output_directory).unwrap();
     }
 
-    const WIDTH: usize = 10000;
-    const BOX: usize = 600;
+    const WIDTH: usize = 1000;
 
     // Put the correct number of threads into rayons global thread pool
     rayon::ThreadPoolBuilder::new()
@@ -122,10 +125,16 @@ fn main() {
     let mut grid_a: &mut [[Cell; WIDTH]] = sections_box.as_mut();
     let mut grid_b: &mut [[Cell; WIDTH]] = sections_b_box.as_mut();
 
+    let box_y = cli
+        .boxx
+        .saturating_sub(height * (rank as usize))
+        .min(height);
+    let box_x = cli.boxx.min(WIDTH);
+
     grid_a[1][1].raw = 0b00111111;
     if previous_rank.is_none() {
-        for x in 0..BOX {
-            for y in 0..BOX {
+        for x in 0..box_x {
+            for y in 0..box_y {
                 grid_a[y][x].raw = 0b00111111;
             }
         }

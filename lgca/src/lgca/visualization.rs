@@ -1,3 +1,4 @@
+use hsv::hsv_to_rgb;
 use ril::{Image, Rgb, TrueColor};
 
 use super::Cell;
@@ -52,7 +53,7 @@ pub fn cells_to_color(cells: &[&Cell]) -> Rgb {
     //     _ => 0.0,
     // };
 
-    let color = hsv::hsv_to_rgb(
+    let color = hsv_to_rgb(
         ((angle * 90.0) + 180.0) as f64,
         (2.0 * length as f64 / cells.len() as f64).min(1.0),
         (density * 6.0).min(1.0),
@@ -61,6 +62,7 @@ pub fn cells_to_color(cells: &[&Cell]) -> Rgb {
     Rgb::from_rgb_tuple(color)
 }
 
+#[allow(dead_code)]
 pub fn cell_to_color(cell: &Cell) -> Rgb {
     let (angle, length) = cell.get_direction();
     let particles = cell.get_particles();
@@ -85,7 +87,7 @@ pub fn draw_cells_detailed<const WIDTH: usize>(cells: &[[Cell; WIDTH]]) -> Image
 
     for (y, row) in cells.iter().enumerate() {
         for (x, pixel) in row.iter().enumerate() {
-            image.set_pixel(x as u32, y as u32, cell_to_color(pixel));
+            image.set_pixel(x as u32, y as u32, cells_to_color(&[&pixel]));
         }
     }
     return image;

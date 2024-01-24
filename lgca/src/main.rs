@@ -10,6 +10,7 @@
 
 mod lgca;
 use crate::lgca::{
+    cell::{TO_EAST, TO_NORTH_EAST, TO_NORTH_WEST, TO_SOUTH_EAST, TO_SOUTH_WEST, TO_WEST},
     new_movements::{movement_bottom_row, movement_even_row, movement_odd_row, movement_top_row},
     visualization::draw_cells_detailed,
 };
@@ -24,8 +25,12 @@ use rayon::{
     iter::{IndexedParallelIterator, IntoParallelRefMutIterator},
     slice::ParallelSlice,
 };
-use ril::{Frame, Image, ImageSequence, Rgb};
+use ril::{
+    encodings::webp::{WebPEncoderOptions, WebPMuxEncoder},
+    Encoder, EncoderMetadata, Frame, Image, ImageSequence, Rgb,
+};
 use std::{
+    fs::File,
     path::PathBuf,
     time::{Duration, Instant},
 };
@@ -111,7 +116,7 @@ fn main() {
         std::fs::create_dir_all(&cli.output_directory).unwrap();
     }
 
-    const WIDTH: usize = 1000;
+    const WIDTH: usize = 10000;
 
     // Put the correct number of threads into rayons global thread pool
     rayon::ThreadPoolBuilder::new()
@@ -144,22 +149,22 @@ fn main() {
     for y in 0..height {
         for x in 0..WIDTH {
             if random.gen_bool(noise) {
-                grid_a[y][x].set_to_east(true)
+                grid_a[y][x].raw ^= TO_EAST;
             }
             if random.gen_bool(noise) {
-                grid_a[y][x].set_to_north_east(true)
+                grid_a[y][x].raw ^= TO_NORTH_EAST;
             }
             if random.gen_bool(noise) {
-                grid_a[y][x].set_to_north_west(true)
+                grid_a[y][x].raw ^= TO_NORTH_WEST;
             }
             if random.gen_bool(noise) {
-                grid_a[y][x].set_to_south_east(true)
+                grid_a[y][x].raw ^= TO_SOUTH_WEST;
             }
             if random.gen_bool(noise) {
-                grid_a[y][x].set_to_south_west(true)
+                grid_a[y][x].raw ^= TO_SOUTH_EAST;
             }
             if random.gen_bool(noise) {
-                grid_a[y][x].set_to_west(true)
+                grid_a[y][x].raw ^= TO_WEST;
             }
         }
     }
@@ -358,7 +363,17 @@ fn main() {
         }
 
         eprintln!("Saving output to {}", filename);
-        output.save_inferred(filename).unwrap();
+
+        let options = WebPEncoderOptions::new().with_lossless(true);
+        let f = File::create(&filename).expect("Create file");
+        let mut encoder =
+            WebPMuxEncoder::new(f, EncoderMetadata::from(&output).with_config(options))
+                .expect("new encoder");
+        for frame in output.iter() {
+            encoder.add_frame(frame).expect("adding frame");
+        }
+        encoder.finish().expect("finish");
+        // output.save_inferred(filename).unwrap();
     }
     let _ = mpi_universe.as_ref().map_or(0, |o| o.0.world().rank());
 }

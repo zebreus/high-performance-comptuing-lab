@@ -474,7 +474,7 @@ movement_bottom_row(&grid_a[WIDTH-2], &grid_a[WIDTH-1], &mut grid_b[WIDTH-1]);
 std::mem::swap(&mut grid_a, &mut grid_b);
 ----
 
-==== Multithreading with Rayon
+==== Shared memory parallelism with Rayon
 
 We will use rayon to divide the processing of the core rows over multiple threads. `par_windows` can be used instead of `windows` and `par_iter_mut` can be used instead of `iter_mut` to process the rows in parallel. The main loop with rayon is shown in <<core_with_rayon>>.
 
@@ -522,6 +522,93 @@ We made measurements for a 2000x2000 grid with 5000 rounds. An intel i9-11950H w
 
 Afterwards we figured out that our CPU does actually support the required AVX512 instructions. We redid the 8 threads measurement and got a performance of 0.034543ns per cell.
 
+==== Distributed memory parallelism with MPI
+
+Our project uses MPI via the rsmpi Rust bindings for distributed memory parallelism. Every MPI node will process a consectuive chunk of rows. For example if we have 2 nodes and 8 rows, node 0 will process rows 0-3 and node 1 will process rows 4-7. Our implementation is shown in <<core_with_mpi>>. Before each round every node sends its top row to the previous node and its bottom row to the next node. These way all nodes that are not at the top or bottom have the context to treat their top/bottom rows like core rows. The first and last nodes still process their rows like core rows.
+
+.One round using MPI and rayon
+[source#core_with_mpi.linenums,rust]
+----
+mpi::request::scope(|scope| {
+    let mut guards = Vec::new();
+
+    if let Some(previous_rank) = previous_rank {
+        guards.push(WaitGuard::from(
+            world
+                .process_at_rank(previous_rank)
+                .immediate_send(scope, unsafe {
+                    std::mem::transmute::<&mut [Cell; WIDTH], &mut [u8; WIDTH]>(
+                        &mut grid_a[0],
+                    )
+                }),
+        ));
+        guards.push(WaitGuard::from(
+            world.process_at_rank(previous_rank).immediate_receive_into(
+                scope,
+                unsafe {
+                    std::mem::transmute::<&mut [Cell; WIDTH], &mut [u8; WIDTH]>(
+                        receive_top,
+                    )
+                },
+            ),
+        ));
+    }
+
+    if let Some(next_rank) = next_rank {
+        guards.push(WaitGuard::from(
+            world
+                .process_at_rank(next_rank)
+                .immediate_send(scope, unsafe {
+                    std::mem::transmute::<&mut [Cell; WIDTH], &mut [u8; WIDTH]>(
+                        &mut grid_a[height - 1],
+                    )
+                }),
+        ));
+        guards.push(WaitGuard::from(
+            world
+                .process_at_rank(next_rank)
+                .immediate_receive_into(scope, unsafe {
+                    std::mem::transmute::<&mut [Cell; WIDTH], &mut [u8; WIDTH]>(
+                        receive_bottom,
+                    )
+                }),
+        ));
+    }
+});
+
+
+if previous_rank.is_some() {
+    movement_even_row(receive_top, &grid_a[0], &grid_a[1], &mut grid_b[0]);
+} else {
+    movement_top_row(&grid_a[0], &grid_a[1], &mut grid_b[0]);
+}
+
+grid_a
+    .par_windows(3)
+    .zip(grid_b.par_iter_mut().skip(1))
+    .enumerate()
+    .for_each(|(row_index, (context, result))| {
+        let above = &context[0];
+        let current = &context[1];
+        let below = &context[2];
+        if ((row_index + 1) % 2) == 0 {
+            movement_even_row(above, current, below, result);
+        } else {
+            movement_odd_row(above, current, below, result);
+        }
+    });
+
+if next_rank.is_some() {
+    movement_odd_row(&grid_a[height-2], &grid_a[height-1], receive_bottom, &mut grid_b[height-1]);
+} else {
+    movement_bottom_row(&grid_a[height-2], &grid_a[height-1], &mut grid_b[height-1]);
+}
+
+std::mem::swap(&mut grid_a, &mut grid_b);
+----
+
+Using this approach we can scale our simulation to multiple nodes. We tested our implementation on the Virgo cluster.
+
 === Results
 
 Our results will focus on the following three questions from the exercise sheet:
@@ -530,6 +617,7 @@ Our results will focus on the following three questions from the exercise sheet:
 * Determine the empirical relationship between the number of processors and the performance, and between the size of the lattice and the performance.
 * What is the largest lattice which you can simulate?
 
+// TODO: magick output_0.webp -repage 1040x1040 -coalesce null: \( output_1.webp -coalesce \) -geometry +0+260 -layers Composite null: \( output_2.webp -coalesce \) -geometry +0+520 -layers Composite null: \( output_3.webp -coalesce \) -geometry +0+780 -layers Composite    bag_append.gif
 
 === Measurements
 

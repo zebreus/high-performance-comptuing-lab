@@ -312,12 +312,12 @@ fn main() {
 
     let calculation_duration = core_duration + top_bottom_duration;
 
-    let calculation_duration_per_cell =
-        (calculation_duration.as_secs_f64() * 1000000000.0) / (WIDTH * height * rounds) as f64;
-    let top_bottom_duration_per_cell =
-        (top_bottom_duration.as_secs_f64() * 1000000000.0) / (WIDTH * 2 * rounds) as f64;
-    let core_duration_per_cell =
-        (core_duration.as_secs_f64() * 1000000000.0) / (WIDTH * (height - 2) * rounds) as f64;
+    let calculation_duration_per_cell = (calculation_duration.as_secs_f64() * 1000000000.0)
+        / (WIDTH * height * rounds * size as usize) as f64;
+    let top_bottom_duration_per_cell = (top_bottom_duration.as_secs_f64() * 1000000000.0)
+        / (WIDTH * 2 * rounds * size as usize) as f64;
+    let core_duration_per_cell = (core_duration.as_secs_f64() * 1000000000.0)
+        / (WIDTH * (height - 2) * rounds * size as usize) as f64;
 
     eprintln!(
         "Calculation duration per round: {}",
@@ -346,24 +346,26 @@ fn main() {
         (calculation_duration + communication_duration + render_duration).as_secs_f64()
     );
 
-    println!(
-        "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
-        WIDTH,
-        height,
-        rounds,
-        size,
-        threads,
-        core_duration.as_secs_f64(),
-        core_duration_per_cell,
-        top_bottom_duration.as_secs_f64(),
-        top_bottom_duration_per_cell,
-        calculation_duration.as_secs_f64(),
-        calculation_duration_per_cell,
-        communication_duration.as_secs_f64(),
-        (calculation_duration + communication_duration).as_secs_f64(),
-        render_duration.as_secs_f64(),
-        images.len()
-    );
+    if rank == 0 {
+        println!(
+            "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
+            WIDTH,
+            height,
+            rounds,
+            size,
+            threads,
+            core_duration.as_secs_f64(),
+            core_duration_per_cell,
+            top_bottom_duration.as_secs_f64(),
+            top_bottom_duration_per_cell,
+            calculation_duration.as_secs_f64(),
+            calculation_duration_per_cell,
+            communication_duration.as_secs_f64(),
+            (calculation_duration + communication_duration).as_secs_f64(),
+            render_duration.as_secs_f64(),
+            images.len()
+        );
+    }
 
     if frames_per_second != 0 {
         let mut output = ImageSequence::<Rgb>::new();

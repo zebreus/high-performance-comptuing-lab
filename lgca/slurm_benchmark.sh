@@ -36,7 +36,7 @@ mkdir -p "$WORK_DIR"
 date >>$WORK_DIR/date.txt
 
 mkdir -p "${WORK_DIR}/executables"
-bash ./build_binaries.sh $WORK_DIR
+bash ./build_binaries.sh "$WORK_DIR/executables"
 
 cp $INITIAL_DIR/run_benchmark.sh "$WORK_DIR"
 

@@ -56,7 +56,7 @@ run-benchmark() {
     JOBNAME="lgca-benchmark-round-$ITERATION"
 
     # set -x
-    sbatch --dependency=singleton --exclusive --job-name=$JOBNAME --constraint="gold6248r" --nodes=${NUM_NODES} --cores-per-socket=24 --ntasks-per-node=1 --cpus-per-task=48 --threads-per-core=1 --error=${WORK_DIR}/%j.err -- ./run_benchmark.sh $NUM_NODES $OUT_FILE $EXECUTABLES_DIR
+    sbatch -p main --dependency=singleton --exclusive --job-name=$JOBNAME --constraint="gold6248r" --nodes=${NUM_NODES} --cores-per-socket=24 --ntasks-per-node=1 --cpus-per-task=48 --threads-per-core=1 --error=${WORK_DIR}/%j.err -- ./run_benchmark.sh $NUM_NODES $OUT_FILE $EXECUTABLES_DIR
     # set +x
 }
 

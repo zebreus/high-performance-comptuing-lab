@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 #SBATCH --threads-per-core=1
 #SBATCH --constraint="gold6248r"
-#SBATCH --time=02:00:00          # total run time limit (HH:MM:SS)
 
 set -x
 

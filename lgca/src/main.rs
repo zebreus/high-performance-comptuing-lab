@@ -290,9 +290,8 @@ fn main() {
                 &mut grid_b[height - 1],
             );
         }
-        top_bottom_duration += round_timer.elapsed();
-
         std::mem::swap(&mut grid_a, &mut grid_b);
+        top_bottom_duration += round_timer.elapsed();
 
         if frames_per_second == 0 {
             continue;
@@ -348,15 +347,22 @@ fn main() {
     );
 
     println!(
-        "{},{},{},{},{},{},{},{}",
+        "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
         WIDTH,
         height,
         rounds,
-        top_bottom_duration_per_cell,
+        size,
+        threads,
+        core_duration.as_secs_f64(),
         core_duration_per_cell,
+        top_bottom_duration.as_secs_f64(),
+        top_bottom_duration_per_cell,
+        calculation_duration.as_secs_f64(),
         calculation_duration_per_cell,
         communication_duration.as_secs_f64(),
-        calculation_duration.as_secs_f64()
+        (calculation_duration + communication_duration).as_secs_f64(),
+        render_duration.as_secs_f64(),
+        images.len()
     );
 
     if frames_per_second != 0 {

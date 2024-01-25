@@ -35,57 +35,59 @@ pub fn movement_core<const WIDTH: usize>(
             // end::movement_core[]
 
             result.raw = new_cell;
-            // result.process_collision();
-            // tag::collision_fake[]
-            if (new_cell == 0b00100100) && (south_east.raw & 0b00010000 == 0) {
-                result.raw = 0b00010010;
-            }
-            if (new_cell == 0b00100100) && (south_east.raw & 0b00010000 != 0) {
-                result.raw = 0b00001001;
-            }
-            if (new_cell == 0b00011011) && (south_east.raw & 0b00010000 == 0) {
-                result.raw = 0b00101101;
-            }
-            if (new_cell == 0b00011011) && (south_east.raw & 0b00010000 != 0) {
-                result.raw = 0b00110110;
-            }
+            if cfg!(use_real_collisions_in_core) {
+                result.process_collision();
+            } else {
+                // tag::collision_fake[]
+                if (new_cell == 0b00100100) && (south_east.raw & 0b00010000 == 0) {
+                    result.raw = 0b00010010;
+                }
+                if (new_cell == 0b00100100) && (south_east.raw & 0b00010000 != 0) {
+                    result.raw = 0b00001001;
+                }
+                if (new_cell == 0b00011011) && (south_east.raw & 0b00010000 == 0) {
+                    result.raw = 0b00101101;
+                }
+                if (new_cell == 0b00011011) && (south_east.raw & 0b00010000 != 0) {
+                    result.raw = 0b00110110;
+                }
 
-            if new_cell == 0b00010010 && (east.raw & 0b00001000 == 0) {
-                result.raw = 0b00001001;
-            }
-            if new_cell == 0b00010010 && (east.raw & 0b00001000 != 0) {
-                result.raw = 0b00100100;
-            }
-            if new_cell == 0b00101101 && (east.raw & 0b00001000 == 0) {
-                result.raw = 0b00110110;
-            }
-            if new_cell == 0b00101101 && (east.raw & 0b00001000 != 0) {
-                result.raw = 0b00011011;
-            }
+                if new_cell == 0b00010010 && (east.raw & 0b00001000 == 0) {
+                    result.raw = 0b00001001;
+                }
+                if new_cell == 0b00010010 && (east.raw & 0b00001000 != 0) {
+                    result.raw = 0b00100100;
+                }
+                if new_cell == 0b00101101 && (east.raw & 0b00001000 == 0) {
+                    result.raw = 0b00110110;
+                }
+                if new_cell == 0b00101101 && (east.raw & 0b00001000 != 0) {
+                    result.raw = 0b00011011;
+                }
 
-            if new_cell == 0b00001001 && (north_east.raw & 0b00000100 == 0) {
-                result.raw = 0b00100100;
-            }
-            if new_cell == 0b00001001 && (north_east.raw & 0b00000100 != 0) {
-                result.raw = 0b00010010;
-            }
-            if new_cell == 0b00110110 && (north_east.raw & 0b00000100 == 0) {
-                result.raw = 0b00011011;
-            }
-            if new_cell == 0b00110110 && (north_east.raw & 0b00000100 != 0) {
-                result.raw = 0b00101101;
-            }
+                if new_cell == 0b00001001 && (north_east.raw & 0b00000100 == 0) {
+                    result.raw = 0b00100100;
+                }
+                if new_cell == 0b00001001 && (north_east.raw & 0b00000100 != 0) {
+                    result.raw = 0b00010010;
+                }
+                if new_cell == 0b00110110 && (north_east.raw & 0b00000100 == 0) {
+                    result.raw = 0b00011011;
+                }
+                if new_cell == 0b00110110 && (north_east.raw & 0b00000100 != 0) {
+                    result.raw = 0b00101101;
+                }
 
-            if new_cell == 0b00101010 {
-                result.raw = 0b00010101;
+                if new_cell == 0b00101010 {
+                    result.raw = 0b00010101;
+                }
+                if new_cell == 0b00010101 {
+                    result.raw = 0b00101010;
+                }
+                // end::collision_fake[]
+                #[allow(unused_assignments)]
+                new_cell = result.raw; // This line does nothing, but autovectorization breaks without it
             }
-            if new_cell == 0b00010101 {
-                result.raw = 0b00101010;
-            }
-            // end::collision_fake[]
-
-            #[allow(unused_assignments)]
-            new_cell = result.raw; // This line does nothing, but autovectorization breaks without it
         },
     );
 }

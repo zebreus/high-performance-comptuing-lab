@@ -116,8 +116,15 @@ fn main() {
         std::fs::create_dir_all(&cli.output_directory).unwrap();
     }
 
-    const WIDTH: usize = 10000;
-
+    const WIDTH: usize = if cfg!(width_100000) {
+        100000
+    } else if cfg!(width_10000) {
+        10000
+    } else if cfg!(width_1000) {
+        1000
+    } else {
+        100
+    };
     // Put the correct number of threads into rayons global thread pool
     rayon::ThreadPoolBuilder::new()
         .num_threads(threads)

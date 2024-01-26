@@ -19,6 +19,8 @@ newResults is a file that combines the following results:
 
 The incomplete lines were removed. There were no duplicate lines.
 
+Maybe ./tmp.r8xzAPwPkv/results.csv contains measuring errors, I am not entirely sure.
+
 ### Code provided to Get Started
 
 We will be sorting 100 byte records taken from files. This idea was taken from the "Sort Benchmark" hosted at <http://sortbenchmark.org/> -- see that web page for much more information.

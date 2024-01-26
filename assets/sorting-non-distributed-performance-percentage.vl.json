@@ -1,6 +1,6 @@
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-  "title": "Non-distributed sorting: Percentage of time spent in each phase",
+  "title": "Non-distributed sorting: Relative duration spent in each phase",
   "config": {
     "font": "Spectral, sans-serif"
   },
@@ -8,6 +8,10 @@
     "url": "./sorting-non-distributed-performance.csv"
   },
   "transform": [
+    { "calculate": "toNumber(datum.reading_the_input) + toNumber(datum.writing_to_disk) + toNumber(datum.sorting_on_worker)", "as": "duration" },
+    { "calculate": "datum.reading_the_input / datum.duration", "as": "reading_the_input" },
+    { "calculate": "datum.writing_to_disk / datum.duration", "as": "writing_to_disk" },
+    { "calculate": "datum.sorting_on_worker / datum.duration", "as": "sorting_on_worker" },
     { "fold": [ "reading_the_input", "writing_to_disk", "sorting_on_worker" ] }
   ],
   "facet": {
@@ -44,15 +48,14 @@
       },
       "y": {
         "field": "value",
-        "title": "Duration (seconds)",
+        "title": "Relative duration",
         "type": "quantitative",
-        "aggregate": "average",
-        "stack": "normalize"
+        "aggregate": "average"
       }
     },
     "layer": [
       {
-        "mark": { "type": "area" }
+        "mark": { "type": "line" }
       }
     ]
   }

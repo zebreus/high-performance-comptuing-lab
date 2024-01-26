@@ -33,66 +33,22 @@ by +
 :part-signifier: Part
 :listing-caption: Listing
 
-== Intro 
+== Intro
 
 In the third lab we will try to run a distributed sorting algorithm using openMPI. We are using Rust and MPI to implement the third lab.
 
 === Non-distributed implementation
 
-We wrote a non-distributed implementation and compared it to the reference CPP implementation. We tried various sorting algorithms and found that radix sort is the fastest, but the standard librarys `sort_unstable()` is not far behind.
-
-<<single_threaded_implementation>> shows the sequential implementation of the matrix multiplication. The algorithm is pretty straight forward. We iterate over the rows of the first matrix and the columns of the second matrix. For each element we calculate the dot product of the row and column. The result is stored in the `result` matrix.
-
-=== Distributed approach
-
-Our distributed implementation is based on dividing the data into buckets and streaming the buckets to the other processes. We use a clear manager/worker approach. The manager is responsible for dividing the data into buckets and sending them to the workers. The workers receive the buckets and sort them. The manager then receives the sorted buckets and merges them into a sorted list.
-
-<<server-flow>> and <<client-flow>> show the flow of the manager and the workers.
-
-// .Reading and distributing the data
-// [nomnoml]
-// ....
-// [<start> start]->
-// [Read block of unsorted data]->[Split into 256 buckets;based on the first byte]->
-// [Send each bucket to responsible worker; _;
-// worker = firstByte % numberOfWorkers]->
-// [<choice> Unsorted data left?]yes->[Read 1mb of unsorted data]
-// [<choice> Unsorted data left?]no ->[Send done to each worker]->
-// [<end> server]--[<note> All data has been distributed to all workers]
-
-// [<start> start client]->
-// [Create 256 empty lists]->
-// [Receive message]->[<choice> Is done message?]no ->
-// [Sort received data]->[Merge into the list with the same prefix]->[Receive message]
-
-// [<choice> Is done message?]yes ->
-// [Discard empty lists]->
-// [<end> client]--[<note> We now have a sorted list for;
-// all buckets this worker is responsible for]
-// ....
-
-// .Receiving the data
-// [nomnoml]
-// ....
-// [<start> start client]->
-// [Discard empty buckets]->[Send next bucket to server]->[<choice> Buckets left?]yes ->[Send next bucket to server]
-// [<choice> Buckets left?]no ->
-// [Send done message]
-
-// [<start> start server]->
-// [Create 256 empty lists]->
-// [Create list with workers that are not finished]->
-// [Receive message from any worker]->[<choice> Is done message?]no ->
-// [Append data to the correct list] ->[Receive message from any worker]
+We wrote a non-distributed implementation and compared it to the reference CPP implementation. We tried various sorting algorithms, but decided to focus on radix sort and the standard libraries `sort_unstable()`.
 
 
-// [<choice> Is done message?] yes ->[Mark worker as finished] ->
-// [<choice> Are all workers finished?]no -> [Receive message from any worker]
-// [<choice> Are all workers finished?]yes ->[Concatenate the 256 sorted lists into one sorted list]-> [Write the sorted list into a file]
-// ....
+=== Distributed implementation
 
+Our distributed implementation splits the input into 256 buckets based on the first byte of an entry. For each bucket there is exactly one responsible worker node. A worker node can be responsible for sorting multiple buckets.
 
-.Server flow
+The manager node reads the whole input, splits it into buckets, and streams the buckets to the worker nodes. After all buckets have been sent, the manager node retrieves the sorted buckets from the workers and merges them into a sorted list. The manager node then writes the sorted list into a file. The exact operation of the manager node is shown in <<server-flow>>. The client flow can be seen in <<client-flow>>.
+
+.Manager flow
 [nomnoml#server-flow,opts=inline,width=22cm]
 ....
 #.box: fill=#8f8 dashed
@@ -116,22 +72,22 @@ worker = firstByte % numberOfWorkers]->
 [<end> end]
 ....
 
-.Client flow
+.Worker flow
 [nomnoml#client-flow]
 ....
 #.box: fill=#8f8 dashed
 
-[<start> start client]->
+[<start> start worker]->
 [Create 256 empty lists]->
 [Receive message]->[<choice> Is done message?]no ->
 [Sort received data]->[Merge into the list with the same prefix]->[Receive message]
 
 [<choice> Is done message?]yes ->
 [<box> Finished reading]->
-[Discard empty buckets]->[Send next bucket to server]->[<choice> Buckets left?]yes ->[Send next bucket to server]
+[Discard empty buckets]->[Send next bucket to manager]->[<choice> Buckets left?]yes ->[Send next bucket to manager]
 [<choice> Buckets left?]no ->
 [Send done message]->
-[<end> client]
+[<end> worker]
 ....
 
 === Measurements
@@ -139,9 +95,10 @@ worker = firstByte % numberOfWorkers]->
 // We did not have time to measure performance at the Virgo cluster. We did measure the performance on our local machines. We used a 10GB file with generated with gensort. The single node implemetation is the non-mpi implementation. The measurements for more than one node are the MPI implementation.
 // <<sorting-data>> show that our MPI implementation is always slower than the single threaded implementation. This is probably due to the overhead of sending the data over the network. We could probably optimize our implementation to be better, but we did not have time to do so.
 
-We measured performance for datasets sized between 2^10 to 2^22 bytes on the Virgo cluster. These datasets were sorted by 4 algorithms:
+We measured performance for datasets sized between 2^10 to 2^30 entries on the Virgo cluster. These datasets were sorted by 4 algorithms:
+
 `radix-sort`:: A single threaded radix sort implementation.
-`unstable_sort`:: The rust standard librarys `sort_unstable()` https://doc.rust-lang.org/std/primitive.slice.html#method.sort_unstable function which uses pattern-defeating quicksort. 
+`unstable_sort`:: The rust standard librarys https://doc.rust-lang.org/std/primitive.slice.html#method.sort_unstable[`sort_unstable()`] function which uses pattern-defeating quicksort.
 `mpi-single`:: Our MPI implementation with a single thread per node.
 `mpi-multi`:: Our MPI implementation with 2-4 threades per node, so reading, transmitting, sorting, and writing can happen in parallel.
 
@@ -149,14 +106,14 @@ We tested the MPI implementations with 1 to 16 nodes and 1 to 16 tasks per node 
 
 === Non distributed performance
 
-We want to select a non-distributed implementation to use as a baseline when comparing the distributed implementations. <<non-distributed-performance-total>> shows the total runtime of the two tested non-distributed implementations for different dataset sizes. It shows that the `sort-unstable` implementation is faster than the `radix-sort` implementation for smaller datasets. It's measurements are also more predictable, as the curve does not have a weird bump at 2^18 bytes. <<non-distributed-performance-per-step>> shows that the bump is probably not a measurement error, as the difference is in the sorting step and not while reading the input or writing the result.
+We want to select a non-distributed implementation to use as a baseline when comparing the distributed implementations. <<non-distributed-performance-total>> shows the total runtime of the two tested non-distributed implementations for different dataset sizes. It shows that `sort-unstable` is faster than `radix-sort` for smaller datasets. It's measurements are also more predictable, as the curve does not have a weird bump at 2^18 bytes. <<non-distributed-performance-per-step>> shows that the bump is probably not a measurement error, as the difference is in the sorting step and not while reading the input or writing the result.
 
 .Total runtime comparison of the non-distributed implementations
 :chart-id: id=non-distributed-performance-total
 :vega-lite-filename: processed-assets/sorting-non-distributed-performance-total.vl.json
 include::scripts/vega-chart.adoc[]
 
-.Runtime breakdown comparison of the non-distributed implementations
+.Runtime comparison of the non-distributed implementations
 :chart-id: id=non-distributed-performance-per-step
 :vega-lite-filename: processed-assets/sorting-non-distributed-performance-per-step.vl.json
 include::scripts/vega-chart.adoc[]
@@ -177,11 +134,6 @@ We will use the `sort-unstable` implementation as a baseline for the distributed
 :vega-lite-filename: processed-assets/sorting-mpi-single-performance-one-node-speedup.vl.json
 include::scripts/vega-chart.adoc[]
 
-.Efficiency compared to non-distributed sorting
-:chart-id: id=mpi-single-performance-one-node-efficiency
-:vega-lite-filename: processed-assets/sorting-mpi-single-performance-one-node-efficiency.vl.json
-include::scripts/vega-chart.adoc[]
-
 It shows that the distributed implementation is slower than the non-distributed implementation for small problems (n <= 2^20 entries). The best relative speedup is achieved for problems with a size of 2^24 , after that the relative speedup gets lower again.
 
 When only two tasks are used, there is no speedup. With 2^24 entries the speedup is exactly 1, which means that the distributed implementation is as fast as the non-distributed implementation. I would have expected it to be lower, as we only have one worker that is actually sorting in that case. The advantage we get by bucketing the data and only sorting small chunks, seems to be equal to the overhead of distributing it into buckets and sending the data over the network.
@@ -189,34 +141,39 @@ When only two tasks are used, there is no speedup. With 2^24 entries the speedup
 
 When using 4 or 8 tasks the speedup is 2 for 2^24 entries. For 16, 32, and 64 tasks the speedup is 3 for 2^24 entries. It looks like the maximum speedup is achieved when using 16 tasks, after that we get diminishing returns.
 
+The efficiency behaves similar to the speedup. The best effieciency is reached for problem sizes around 2^26. The more ranks we use, the lower the efficiency gets. This is to be expected, because of the communication overhead. The efficiency is always lower than 1, which means that the distributed implementation is always slower than the non-distributed implementation.
+
+.Efficiency compared to non-distributed sorting
+:chart-id: id=mpi-single-performance-one-node-efficiency
+:vega-lite-filename: processed-assets/sorting-mpi-single-performance-one-node-efficiency.vl.json
+include::scripts/vega-chart.adoc[]
+
+
+<<one-node-16M-steps>> shows how the runtime is distributed over the different steps of the algorithm. As most of the sorting is done during the receiving on the worker nodes, the sending step on the manager node scales with the number of tasks, because it measures the time until all tasks received all data. As described in <<distributed-implementation>> the worker nodes alternate between receiving a bit of data and sorting it, which is measured seperatly. Because of this the sum of the sorting and receiving step on the workers roughly add up to the sum of the reading, bucketing and sending step on the manager node.
 
 .Duration of each step when sorting 16M numbers
 :chart-id: id=one-node-16M-steps
 :vega-lite-filename: processed-assets/sorting-one-node-16M-steps.vl.json
 include::scripts/vega-chart.adoc[]
 
+<<one-node-sorting-vs-io>> sums up the runtime of all tasks and shows how much is spend doing actual sorting and how much is spend doing I/O or waiting for I/O. We can see that most of the time is spend doing I/O operations. The more tasks we add, the more disbalanced the relation between I/O and sorting.
 
-=== Learnings
+.Total time spend on I/O vs total time spend on sorting
+:chart-id: id=one-node-sorting-vs-io
+:vega-lite-filename: processed-assets/sorting-one-node-sorting-vs-io.vl.json
+include::scripts/vega-chart.adoc[]
+
+This demonstrates that our main bottleneck is distributing the data among all nodes. We tried a few different combinations of nodes, tasks, and problem sizes and it always is the case that the I/O on the manager node is the main bottleneck. We tried to improve the performance by using a different MPI function to send the data, but we did not manage to improve the performance significantly. We also learned that MPI has a limit of 2GB per buffer, which can be problematic when working with large datasets, like 100GB of sorting data.
+
+== Results
+
+The main bottleneck of our implementation is the communication between the manager node and the other nodes. For some specific combinations of problem size and number of nodes we can achieve a speedup of up to 4 compared to the sequential implementation but most of the time the speedup is equal to or lower than 1. 
 
 Rust MPI is ok, but not great. It is not very ergonomic as it mostly just wraps C calls. The documentation is acceptable. One of the major pitfalls we encountered was with the `receive_vec` function which is a wrapper around `MPI_recv`. It puts the data directly in a heap allocated vector. It is quite slow for large buffers, as it does not know the size of the data it is receiving in advance, so it has to grow the Vec repeatedly. We ended up using `receive_into` a buffer instead, which is a bit more verbose, but much faster.
-
-We also learned that MPI has a limit of 2GB per buffer, which can be problematic when working with large datasets, like 100GB of sorting data.
 
 The posix fadvise API is cool and can be used to tell the OS that we are going to read a file sequentially and only once. This can improve performance by a tiny bit, as the kernel can prefetch more the data. Memadvise is probably also cool, but we did not have time to try it out.
 
 Lustre can be quite slow, probably due to congestion.
-
-=== Benchmarking protocol
-
-We want to benchmark our algorithm for the 1G entries dataset. Our benchmark has to read the data from the /tmp partition from a single node and write the result back to the /tmp partition on a single node. We do this, because we want to benchmark our algorithm (and the performance of the nodes and the networking performance). Sorting should happen in a distributed fashion.
-
-First, we will copy the data to the tmp partition of the root node to avoid the pitfalls of using lustre. THen...
-
-.Our MPI implementation
-:chart-id: id=sorting-data
-:vega-lite-filename: processed-assets/sorting-data.vl.json
-include::scripts/vega-chart.adoc[]
-
 
 
 include::scripts/trailing-scripts.adoc[]

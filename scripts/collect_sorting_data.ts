@@ -107,7 +107,7 @@ await Deno.writeTextFile(
 const mpiOneNode16MSteps = results
   .filter((x) => x.implementation == "mpi-single")
   .filter((x) => x.nodes === "1")
-  .filter((x) => x.entries === "16777216")
+  .filter((x) => x.entries === "" + Math.pow(2, 24))
   .map(
     ({
       implementation,

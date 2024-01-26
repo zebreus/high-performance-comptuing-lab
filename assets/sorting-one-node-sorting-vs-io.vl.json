@@ -1,0 +1,48 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Time spend on IO vs time spend on sorting (16M entries, 1 node)",
+  "config": {
+    "font": "Spectral, sans-serif"
+  },
+  "data": {
+    "url": "./sorting-one-node-16M-steps.csv"
+  },
+
+
+  "transform": [
+    { "calculate": "toNumber(datum[\"tasks\"]) - 1", "as": "workers" },
+    { "calculate": "toNumber(datum[\"Reading input file\"]) + toNumber(datum[\"Sending to workers\"]) + toNumber(datum[\"Receiving from workers\"]) + toNumber(datum[\"Writing output file\"])  + toNumber(datum[\"Receiving from manager\"]) * toNumber(datum[\"workers\"]) + toNumber(datum[\"Sending to manager\"]) * toNumber(datum[\"workers\"])", "as": "Total time spend on IO" },
+    { "calculate": "toNumber(datum[\"Dividing data into buckets\"]) + toNumber(datum[\"Sorting buckets\"]) * toNumber(datum[\"workers\"])", "as": "Total time spend on sorting" },
+    { "fold": [ "Total time spend on IO", "Total time spend on sorting" ], "as": [ "key", "value" ] }
+  ],
+
+  "encoding": {
+    "x": {
+      "field": "tasks",
+      "type": "quantitative",
+      "scale": {
+        "type": "log",
+        "base": 2,
+        "nice": true
+      },
+      "title": "Number of ranks"
+    },
+    "color": {
+      "field": "key",
+      "title": null
+    },
+    "y": {
+      "field": "value",
+      "type": "quantitative",
+      "title": "Mean time (s)",
+      "aggregate": "mean",
+      "scale": {
+        "type": "linear",
+        "base": 2,
+        "nice": true
+      }
+    }
+  },
+  "mark": { "type": "line", "tooltip": true, "point": true }
+
+}

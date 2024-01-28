@@ -57,7 +57,7 @@ run-benchmark() {
 
     TIME="00:45:00"
     if [[ $NUM_NODES = "1" ]]; then
-        TIME="02:30:00"
+        TIME="01:30:00"
     fi
 
     # set -x
@@ -66,7 +66,7 @@ run-benchmark() {
 }
 
 for ITERATION in $(seq 1 5); do
-    for NODES in 1 2 4 8 16; do
+    for NODES in 1 2 4; do
         run-benchmark $NODES "$ITERATION"
     done
 done

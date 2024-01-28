@@ -1,0 +1,40 @@
+{
+    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+    "title": "Performance of dividing the problem into threads vs into tasks",
+    "config": {
+        "font": "Spectral, sans-serif",
+        "fieldTitle": "plain"
+    },
+    "data": {
+        "url": "./lgca-different-sizes-comparison.csv"
+    },
+    "encoding": {
+        "x": {
+            "field": "width",
+            "type": "quantitative",
+            "scale": {
+                "type": "log",
+                "base": 10
+            },
+            "title": "Grid size",
+            "axis": {
+                "grid": false,
+                "tickCount": 4,
+                "tickColor": "#fff0"
+            }
+
+        },
+        "y": {
+            "field": "calculation_duration_per_cell",
+            "title": "Cells per second",
+            "type": "quantitative",
+            "aggregate": "mean",
+            "scale": {
+                "type": "log",
+                "base": 10
+            }
+        }
+    },
+    "mark": { "type": "line", "tooltip": true, "point": true }
+
+}

@@ -10,7 +10,7 @@ EXECUTABLES_DIR=$3
 RUN_ID=$SLURM_JOB_ID
 
 srun --nodes 1 --ntasks=1 -- echo This node seems to be working || exit 7
-srun --nodes "$NUM_NODES" --ntasks="$NUM_NODES" -- echo All nodes seem to be working || exit 8
+srun --nodes "$NUM_NODES" --ntasks="$NUM_NODES" -- echo "All nodes seem to be working" || exit 8
 
 for _ in 1 2; do
     filename=$(mktemp kickoff.XXX --tmpdir)
@@ -36,13 +36,13 @@ for _ in 1 2; do
         srun --nodes "$NUM_NODES" --exclusive --ntasks="$NUM_NODES" --ntasks-per-node=1 --cpu-bind=socket --cpus-per-task=48 -- "${EXECUTABLES_DIR}/lgca-100" --framerate 0 --threads 48 --height 100 --boxx 25 --rounds 1000 | grep -v "Singularity container"
         echo -ne "lgca-1000,${SLURMD_NODENAME},avx512,fake,$RUN_ID,$NUM_NODES,48,1,"
         srun --nodes "$NUM_NODES" --exclusive --ntasks="$NUM_NODES" --ntasks-per-node=1 --cpu-bind=socket --cpus-per-task=48 -- "${EXECUTABLES_DIR}/lgca-1000" --framerate 0 --threads 48 --height 1000 --boxx 250 --rounds 1000 | grep -v "Singularity container"
-        echo -ne "lgca-10000,${SLURMD_NODENAME},avx512,fake,$RUN_ID,$NUM_NODES,48,1,"
-        srun --nodes "$NUM_NODES" --exclusive --ntasks="$NUM_NODES" --ntasks-per-node=1 --cpu-bind=socket --cpus-per-task=48 -- "${EXECUTABLES_DIR}/lgca-10000" --framerate 0 --threads 48 --height 10000 --boxx 2500 --rounds 1000 | grep -v "Singularity container"
         echo -ne "lgca-100000,${SLURMD_NODENAME},avx512,fake,$RUN_ID,$NUM_NODES,48,1,"
         srun --nodes "$NUM_NODES" --exclusive --ntasks="$NUM_NODES" --ntasks-per-node=1 --cpu-bind=socket --cpus-per-task=48 -- "${EXECUTABLES_DIR}/lgca-100000" --framerate 0 --threads 48 --height 100000 --boxx 25000 --rounds 1000 | grep -v "Singularity container"
 
         for __ in 1 2 3 4; do
             # Run different combinations of threads and ranks
+            echo -ne "lgca-10000,${SLURMD_NODENAME},avx512,fake,$RUN_ID,$NUM_NODES,48,1,"
+            srun --nodes "$NUM_NODES" --exclusive --ntasks="$(expr $NUM_NODES \* 1)" --ntasks-per-node=1 --cpu-bind=socket --cpus-per-task=48 -- "${EXECUTABLES_DIR}/lgca-10000" --framerate 0 --threads 48 --height 10000 --boxx 2500 --rounds 1000 | grep -v "Singularity container"
             echo -ne "lgca-10000,${SLURMD_NODENAME},avx512,fake,$RUN_ID,$NUM_NODES,24,2,"
             srun --nodes "$NUM_NODES" --exclusive --ntasks="$(expr $NUM_NODES \* 2)" --ntasks-per-node=2 --cpu-bind=socket --cpus-per-task=24 -- "${EXECUTABLES_DIR}/lgca-10000" --framerate 0 --threads 24 --height 10000 --boxx 2500 --rounds 1000 | grep -v "Singularity container"
             echo -ne "lgca-10000,${SLURMD_NODENAME},avx512,fake,$RUN_ID,$NUM_NODES,16,3,"
@@ -55,6 +55,8 @@ for _ in 1 2; do
             srun --nodes "$NUM_NODES" --exclusive --ntasks="$(expr $NUM_NODES \* 8)" --ntasks-per-node=8 --cpu-bind=socket --cpus-per-task=6 -- "${EXECUTABLES_DIR}/lgca-10000" --framerate 0 --threads 6 --height 10000 --boxx 2500 --rounds 1000 | grep -v "Singularity container"
             echo -ne "lgca-10000,${SLURMD_NODENAME},avx512,fake,$RUN_ID,$NUM_NODES,4,12,"
             srun --nodes "$NUM_NODES" --exclusive --ntasks="$(expr $NUM_NODES \* 12)" --ntasks-per-node=12 --cpu-bind=socket --cpus-per-task=4 -- "${EXECUTABLES_DIR}/lgca-10000" --framerate 0 --threads 4 --height 10000 --boxx 2500 --rounds 1000 | grep -v "Singularity container"
+            echo -ne "lgca-10000,${SLURMD_NODENAME},avx512,fake,$RUN_ID,$NUM_NODES,3,16,"
+            srun --nodes "$NUM_NODES" --exclusive --ntasks="$(expr $NUM_NODES \* 16)" --ntasks-per-node=16 --cpu-bind=socket --cpus-per-task=3 -- "${EXECUTABLES_DIR}/lgca-10000" --framerate 0 --threads 3 --height 10000 --boxx 2500 --rounds 1000 | grep -v "Singularity container"
             echo -ne "lgca-10000,${SLURMD_NODENAME},avx512,fake,$RUN_ID,$NUM_NODES,2,24,"
             srun --nodes "$NUM_NODES" --exclusive --ntasks="$(expr $NUM_NODES \* 24)" --ntasks-per-node=24 --cpu-bind=socket --cpus-per-task=2 -- "${EXECUTABLES_DIR}/lgca-10000" --framerate 0 --threads 2 --height 10000 --boxx 2500 --rounds 1000 | grep -v "Singularity container"
             echo -ne "lgca-10000,${SLURMD_NODENAME},avx512,fake,$RUN_ID,$NUM_NODES,1,48,"

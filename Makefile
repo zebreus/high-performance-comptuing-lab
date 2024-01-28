@@ -31,6 +31,7 @@ KickOff/results_clang.csv:
 
 KICKOFF_DATA_TARGETS = assets/compiler-comparison.csv assets/mpi-cpp.csv assets/implementation-comparison-fixed-n.csv assets/implementation-comparison-fixed-threads.csv
 SORTING_DATA_TARGETS = assets/sorting-duration-on-one-node.csv
+LGCA_DATA_TARGETS = assets/lgca-core-implementation-comparison.csv assets/lgca-different-sizes-comparison.csv
 
 $(KICKOFF_DATA_TARGETS) : KickOff/results_gcc.csv KickOff/results_clang.csv scripts/collect_data.ts
 	deno run -A scripts/collect_data.ts
@@ -38,8 +39,12 @@ $(KICKOFF_DATA_TARGETS) : KickOff/results_gcc.csv KickOff/results_clang.csv scri
 $(SORTING_DATA_TARGETS) : Sorting/results.csv scripts/collect_sorting_data.ts
 	deno run -A scripts/collect_sorting_data.ts
 
+$(LGCA_DATA_TARGETS) : lgca/results.csv scripts/collect_lgca_data.ts
+	deno run -A scripts/collect_lgca_data.ts
+
 data-kickoff: $(KICKOFF_DATA_TARGETS)
 data-sorting: $(SORTING_DATA_TARGETS)
+data-lgca: $(LGCA_DATA_TARGETS)
 
 SCSS_FILES = $(wildcard styles/*.scss) $(wildcard styles/*/*.scss) $(wildcard styles/*/*/*.scss)
 

@@ -1,0 +1,42 @@
+{
+    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+    "title": "Many tasks vs large tasks (multiple nodes)",
+    "config": {
+        "font": "Spectral, sans-serif",
+        "fieldTitle": "plain"
+    },
+    "data": {
+        "url": "./lgca-multiple-nodes-comparison.csv"
+    },
+    "encoding": {
+        "x": {
+            "field": "tasks_per_node",
+            "type": "quantitative",
+            "scale": {
+                "type": "log",
+                "base": 2
+            },
+            "title": "Tasks per node",
+            "axis": {
+                "grid": false
+            }
+
+        },
+        "color": {
+            "field": "nodes",
+            "title": "Nodes"
+        },
+        "y": {
+            "field": "cells_per_second",
+            "title": "Cells per second",
+            "type": "quantitative",
+            "aggregate": "mean",
+            "scale": {
+                "type": "log",
+                "base": 10
+            }
+        }
+    },
+    "mark": { "type": "line", "tooltip": true, "point": true }
+
+}

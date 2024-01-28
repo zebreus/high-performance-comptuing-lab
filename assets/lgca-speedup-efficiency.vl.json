@@ -1,0 +1,112 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Speedup and efficiency over multiple nodes",
+  "config": {
+    "font": "Spectral, sans-serif",
+    "fieldTitle": "plain"
+  },
+  "data": {
+    "url": "./lgca-multiple-nodes-comparison.csv"
+  },
+  "transform": [
+    {
+      "calculate": "1.0 / datum['cells_per_second']",
+      "as": "cells_per_second"
+    },
+    {
+      "joinaggregate": [
+        { "op": "mean", "field": "cells_per_second", "as": "mean_cells_per_second" }
+      ],
+
+      "groupby": [ "nodes", "tasks_per_node" ]
+    },
+    {
+      "sort": [ { "field": "nodes", "order": "ascending" } ],
+      "window": [
+        { "op": "first_value", "as": "first_cells_per_second", "field": "mean_cells_per_second" }
+      ],
+      "groupby": [ "tasks_per_node" ]
+    },
+    {
+      "calculate": "datum['first_cells_per_second'] / datum['mean_cells_per_second']",
+      "as": "Relative Speedup"
+    },
+    {
+      "calculate": "datum['first_cells_per_second'] / datum['mean_cells_per_second'] / datum['nodes']",
+      "as": "Relative Efficiency"
+    }
+  ],
+
+  "resolve": {
+    "axis": {
+      "y": "shared"
+    }
+  },
+
+  "hconcat": [
+    {
+      "encoding": {
+        "x": {
+          "field": "tasks_per_node",
+          "type": "quantitative",
+          "scale": {
+            "type": "log",
+            "base": 2,
+            "nice": true
+          },
+          "title": "Tasks per node"
+        },
+        "color": {
+          "field": "nodes",
+          "title": "Nodes"
+        },
+        "y": {
+          "field": "Relative Speedup",
+          "type": "quantitative",
+          "aggregate": "mean",
+          "scale": {
+            "type": "log",
+            "base": 2,
+            "nice": true
+          },
+          "axis": {
+            "labelExpr": "if(datum.value > 0.1, datum.value ,'₂' + (log(datum.value) / log(2)))"
+          }
+        }
+      },
+      "mark": { "type": "line", "tooltip": true, "point": true }
+    },
+    {
+      "encoding": {
+        "x": {
+          "field": "tasks_per_node",
+          "type": "quantitative",
+          "scale": {
+            "type": "log",
+            "base": 2,
+            "nice": true
+          },
+          "title": "Tasks per node"
+        },
+        "color": {
+          "field": "nodes",
+          "title": "Nodes"
+        },
+        "y": {
+          "field": "Relative Efficiency",
+          "type": "quantitative",
+          "aggregate": "mean",
+          "scale": {
+            "type": "log",
+            "base": 2,
+            "nice": true
+          },
+          "axis": {
+            "labelExpr": "if(datum.value > 0.1, datum.value ,'₂' + (log(datum.value) / log(2)))"
+          }
+        }
+      },
+      "mark": { "type": "line", "tooltip": true, "point": true }
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+    "title": "Different core implementations",
+    "config": {
+        "font": "Spectral, sans-serif",
+        "fieldTitle": "plain"
+    },
+    "data": {
+        "url": "./lgca-core-implementation-comparison.csv"
+    },
+    "encoding": {
+        "x": {
+            "field": "threads",
+            "type": "quantitative",
+            "scale": {
+                "type": "log",
+                "base": 2,
+                "nice": true
+            },
+            "title": "Threads"
+        },
+        "color": {
+            "field": "setup",
+            "title": "Implementation"
+        },
+        "y": {
+            "field": "calculation_duration_per_cell",
+            "title": "Cells calculated per second",
+            "type": "quantitative",
+            "aggregate": "mean",
+            "scale": {
+                "type": "log",
+                "base": 10,
+                "domainMax": 50000000000,
+                "domainMin": 100000000
+            }
+        }
+    },
+    "mark": { "type": "line", "tooltip": true, "point": true }
+
+}

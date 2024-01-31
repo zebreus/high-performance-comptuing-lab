@@ -27,8 +27,7 @@ Faculty of Computer Science
 
 [.presented-by.text-center]
 by +
-****REMOVED**** ***REMOVED*** +
-****REMOVED**** ***REMOVED***
+Zebreus
 
 :part-signifier: Part
 :listing-caption: Listing

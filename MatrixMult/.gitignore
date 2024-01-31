@@ -1,0 +1,11 @@
+# Ignore all
+
+# Unignore all with extensions
+matrix_*
+!matrix_*.cpp
+
+# Ignore test matrices
+matrix-*
+
+# Ignore objects
+*.o

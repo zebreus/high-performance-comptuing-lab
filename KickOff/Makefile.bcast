@@ -1,0 +1,77 @@
+# This Makefile is brutally simple, not very sophisticated,
+# and not at all up to my normal standards...
+# ...Be grateful, dear reader!
+# (Signed, Prof. R. Moore, h_da, fbi )
+
+# --------------------------------------------------------------------------
+
+# Choose a C++ and a C Compiler!
+# Ether gnu compiler chain (gcc):
+# C++ = g++
+# CC = gcc
+# Or clang / LLVM:
+C++ = clang++
+CC = clang
+# Or whatever is the default on your system:
+# C++ = c++
+# CC = cc
+
+CPPFLAGS = -std=c++11 -I/user/local/include  -O3
+LDFLAGS  = -std=c++11 -L/user/local/lib      -O3
+
+# On MacOS, use homebrew to install llvm and libomp ("brew install llvm libomp"), then
+# C++ = /opt/homebrew/opt/llvm/bin/clang++
+# CC = /opt/homebrew/opt/llvm/bin/clang
+
+# CPPFLAGS += -I/opt/homebrew/opt/llvm/include
+# LDFLAGS += -L/opt/homebrew/opt/llvm/lib
+
+
+
+all: mpi-pi cpp11-pi openMP-pi
+
+clean:
+	-rm -f *.o mpi-pi cpp11-pi openMP-pi
+
+# NOTE : It is possible to tell mpicc which c (or c++) compiler to use, 
+# but the method depends on whether you are using OpenMPI or MPICH.
+# For MPICH, use 
+#	mpicc -cc="$(CC)" -O3 ... 
+# For OpenMPI, see "man mpicc" (environment variables, toward the bottom of the page)
+
+mpi-pi.o: mpi-pi.c
+	mpicc -O3 -c $<
+
+mpi-pi: mpi-pi.o
+	mpicc -O3 -o mpi-pi mpi-pi.o
+
+
+cpp11-pi.o: cpp11-pi.cpp
+	$(C++) $(CPPFLAGS) -pthread -c $<
+
+cpp11-pi: cpp11-pi.o
+	$(C++) $(LDFLAGS) -o cpp11-pi cpp11-pi.o -pthread
+
+openMP-pi.o: openMP-pi.cpp
+	$(C++) $(CPPFLAGS) -fopenmp -c $<
+
+openMP-pi: openMP-pi.o
+	$(C++) $(LDFLAGS) -fopenmp -O3 -o openMP-pi openMP-pi.o
+
+NUM_THREADS = 16
+
+tests: all
+#  Use these tests if you have both slurm and OpenMPI (i.e. on the BDC!)
+	srun -p big   --bcast=${PWD}/cpp11-pi  -c ${NUM_THREADS} -n 1 ./cpp11-pi ${NUM_THREADS}
+	srun -p big   --bcast=${PWD}/openMP-pi -c ${NUM_THREADS} -n 1 ./openMP-pi ${NUM_THREADS}
+	salloc -p small --nodes=4 --ntasks-per-node=4 bash -x -c "sbcast -f mpi-pi ${PWD}/mpi-pi; \
+							          mpiexec mpi-pi "
+
+# If you are using mpich without slurm (perhaps on your own notebook?)
+# use these tests instead:
+#	echo "\nRunning cpp11-pi without slurm...";
+#	./cpp11-pi 4
+#	echo "\nRunning openMP-pi without slurm...";
+#	./openMP-pi 4
+#	echo "\nRunning mpi-pi without slurm...";
+#	mpiexec -n 4 ./mpi-pi

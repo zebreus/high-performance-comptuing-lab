@@ -98,8 +98,8 @@ await Deno.writeTextFile(
 const threadsVsTasksComparison = results
   .filter((x) => parseInt(x["size"]) * parseInt(x["threads"]) == 48)
   .filter((x) => x["width"] == "10000")
-  .filter((x) => x["nodes"] == "1")
   .filter((x) => "lgca-10000" == x["name"])
+  .filter((x) => x["nodes"] == "1")
   .map((x) => ({
     ...x,
     cells_per_second:

@@ -35,7 +35,7 @@ by +
 
 == Concept 
 
-In the fourth lab, we built a lattice gas cellular automaton (LGCA) using Rust, Rayon, and MPI. Our LGCA is based on the FHP-I model. It uses a hexagonal grid and does not support resting particles. We will also try using a lookup table to process collisions quickly. We used rayon to divide the processing of the core rows over multiple threads. In addition, we used MPI via the rsmpi Rust bindings for distributed memory parallelism. Our implementation uses AVX512 SIMD instructions to process 64 cells at once.
+In the fourth lab, we built a lattice gas cellular automaton (LGCA) using Rust, Rayon, and MPI. Our LGCA is based on the FHP-I model. It uses a hexagonal grid and does not support resting particles. We will also try using a lookup table to process collisions quickly. We used rayon to divide the processing of the core rows over multiple threads. In addition, we used MPI via the rsmpi Rust bindings for distributed memory parallelism. Our implementation uses AVX512 SIMD instructions to process 64 cells at once. Our solution can process 492 Gigabytes of cell data per second when running on four intel nodes on the Virgo cluster.
 
 === Requirements
 
@@ -56,7 +56,8 @@ The following requirements are given by the lab instructions:
 The FHP-I model uses hexagonal cells. Each cell can contain up to six particles, one in each direction. The directions are called west, north-west, north-east, east, south-east, and south-west. We will store the cells row-wise in an even-r horizontal layout as shown in <<even-r-layout>>
 
 ."even-r" horizontal layout
-image::../assets/hexagons.svg[even-r layout#even-r-layout,opts=inline]
+[#even-r-layout]
+image::../assets/hexagons.svg[#even-r-layout,opts=inline]
 
 Cells are represented by bytes with one bit for each direction, as shown in <<cell-memory-layout>>.
 
@@ -103,7 +104,7 @@ Nearly all particles will be processed in the grid's core for big grids, so we w
 
 We define four functions for the four different cases. Each function has a special case for the first and last cell and delegates the core cells of the row to the `movement_core` function. The top and bottom rows also have a special case for the core of them, as they need to reflect particles that would move out of the grid.
 
-To calculate the next state of a cell, we need to look at all of its neighboring cells and move the particles into the current cell. The movement logic for core cells is shown in <<movement_implementation>>. We need special logic to handle the missing neighbors for cells that are not in the core. Instead of the missing neighbor, we use a particle from the current cell as the neighbor. For example, the logic for the top-right cell is shown in <<top-right-movement>>.
+To calculate the next state of a cell, we need to look at all of its neighboring cells and move the particles into the current cell. The movement logic for core cells is shown in <<movement_implementation>>. We need special logic to handle the missing neighbors for cells that are not in the core. Instead of the missing neighbor, we use a particle from the current cell as the neighbor. For example, the logic for the top-right cell is shown in <<top_right_movement_implementation>>.
 
 .Movement calculation for core cells
 [source#movement_implementation.linenums,rust]
@@ -129,7 +130,7 @@ While this collision implementation is correct, its performance is quite bad bec
 
 === Optimizing 
 
-For big grids, nearly all particles will be processed in the core of the grid, so we want to optimize that case as much as possible. As the GSI has machines that support AVX512, we want to write code that utilizes these instructions to process 64 cells at once. While we could have tried to write the movement and collision logic in x86 assembly, we chose to try to write logic that can be auto-vectorized by the compiler when processing large arrays of cells. We used https://godbolt.org to view the generated machine code and make sure that our implementation supports AVX512. To enable auto-vectorization for AVX512 instructions, we used the rust flags shown in <<avx512-rust-flags>>.
+For big grids, nearly all particles will be processed in the core of the grid, so we want to optimize that case as much as possible. As the GSI has machines that support AVX512, we want to write code that utilizes these instructions to process 64 cells at once. While we could have tried to write the movement and collision logic in x86 assembly, we chose to try to write logic that can be auto-vectorized by the compiler when processing large arrays of cells. We used https://godbolt.org/z/1YcasddvK[https://godbolt.org] to view the generated machine code and make sure that our implementation supports AVX512. To enable auto-vectorization for AVX512 instructions, we used the rust flags shown in <<avx512-rust-flags>>.
 
 .Rust flags for enableing AVX512
 [source#avx512-rust-flags,console]
@@ -512,9 +513,9 @@ std::mem::swap(&mut grid_a, &mut grid_b);
 * With 16 threads: 0.038706ns per cell
 * With 20 threads: 0.050061ns per cell
 
-We made measurements for a 2000x2000 grid with 5000 rounds. An intel i9-11950H was used for testing. Based on the Willow Cove microarchitecture, it has eight cores and 16 threads. The measurements show that the performance is best with eight threads. I am not sure why this is the case. I would like to think that a single thread keeps the shared vector units on its core busy all the time because there are nearly no branches, and most instructions in the main loop are vector instructions. However, it may as well be that there is a memory bottleneck.
+We made measurements for a 2000x2000 grid with 5000 rounds. An intel i9-11950H was used for testing. Based on the Willow Cove microarchitecture, it has eight cpus and 16 cores. The measurements show that the performance is best with eight cores. I am not sure why this is the case. I would like to think that a single core keeps the shared vector units on its CPU busy all the time because there are nearly no branches, and most instructions in the main loop are vector instructions. However, it may as well be that there is a memory bottleneck.
 
-Afterward, we discovered that our CPU actually supports the required AVX512 instructions. We redid the eight threads measurement and got a performance of 0.034543ns per cell.
+Afterward, we discovered that our processor actually supports the required AVX512 instructions. We redid the eight threads measurement and got a performance of 0.034543ns per cell.
 
 === Distributed memory parallelism with MPI
 
@@ -605,7 +606,7 @@ Using this approach, we can scale our simulation to multiple nodes. We tested ou
 
 == Measurements
 
-The Virgo cluster has nodes with Intel Xeon Gold 6248 CPUs, which support AVX512. Each Node has two Sockets, each with 24 cores and 48 threads. The measurements always reserved a whole node because the measurements were really unpredictable sometimes when sharing a node with other tasks. We think that this is caused by some other job that does not use many cores but completely saturates the memory bandwidth of the node, but we did not investigate this further. Using a whole node exclusively for measurements solved this problem.
+The Virgo cluster has nodes with Intel Xeon Gold 6248 CPUs, which support AVX512. Each Node has two Sockets, each with 24 CPUs and 48 cores. The measurements always reserved a whole node because the measurements were really unpredictable sometimes when sharing a node with other tasks. We think that this is caused by some other job that does not use many cores but completely saturates the memory bandwidth of the processors, but we did not investigate this further. We thought using a whole node exclusively for measurements would solve this problem. It did not, but we ran enough measurements to get some good ones.
 
 The main metric we will focus on during our measurements is the time per cell. This metric is calculated by dividing the total runtime by the total number of cells calculated (width * height * rounds). The runtime measurement starts after the grid is set up and ends after the last calculation is done, so it does not include memory allocation, program startup, or placing the initial cells into the grid. This metric is mostly independent of the actual test size and lets us compare different measurements with different grid sizes. It should be noted that the actual time per cell depends on the grid size because the processing of border cells is far slower than the processing of core cells.
 
@@ -620,9 +621,9 @@ We wanted to know if AVX512 (512bit vector operations) brings improvement over u
 :vega-lite-filename: processed-assets/lgca-core-implementation-comparison.vl.json
 include::scripts/vega-chart.adoc[]
 
-The vectorized implementations process roughly ten times more cells per second than the real-random implementation. Of the vectorized implementations, the AVX512 implementation is about 30% faster than the AVX2 implementation. This is a bit less than we expected, but it is still a significant improvement. The non-vectorized implementation scales linearly with the number of threads, but from 48 to 96 threads, the performance only improves by 20%. This is because the node has only 48 CPUs. When we use more threads, SMT is used, and resources are shared between two threads on the same core. 
+The vectorized implementations process roughly ten times more cells per second than the real-random implementation. Of the vectorized implementations, the AVX512 implementation is about 30% faster than the AVX2 implementation. This is a bit less than we expected, but it is still a significant improvement. The non-vectorized implementation scales linearly with the number of threads, but from 48 to 96 threads, the performance only improves by 20%. This is because the node has only 48 CPUs. SMT is used when we use more threads and resources are shared between two cores on the same CPU. 
 
-Both vectorized implementations scale about linearly with the number of threads but hit a plateau when using more than 16 threads. With more threads, the speed stays at around 35 Gigacells per second. A memory throughput bottleneck probably causes this. As one cell is 1 byte in size, the CPU is loading and storing at 35 GB/s. The theoretical maximum memory bandwidth of the CPU is 143.36 GB/s (6 channels of 2933 MHz memory). The node has two sockets, so the maximum bandwidth is around 281 GB/s. Our actual maximum is about an eighth of the theoretical maximum. This is probably because we did not optimize memory access patterns to keep the code simple. We could analyze the number of page faults to improve it and ensure we are aligned with the cache lines. We could also improve caching, as our threads are split over two sockets, so they are not sharing the L3 cache. We could use Slurm to make sure every thread is on the same socket and run two tasks per node
+Both vectorized implementations scale about linearly with the number of cores but hit a plateau when using more than 16 cores. With more cores, the speed stays at around 35 Gigacells per second. A memory throughput bottleneck probably causes this. As one cell is 1 byte in size, the CPU is loading and storing at 35 GB/s. The theoretical maximum memory bandwidth per CPU is 143.36 GB/s (6 channels of 2933 MHz memory). The node has two sockets, so the maximum bandwidth is around 281 GB/s. Our actual maximum is about an eighth of the theoretical maximum. This is probably because we did not optimize memory access patterns to keep the code simple. We could analyze the number of page faults to improve it and ensure we are aligned with the cache lines. We could also improve caching, as our cores are split over two sockets, so they are not sharing the L3 cache. We could use Slurm to make sure every cores is on the same socket and run two tasks per node
 // OPTIONAL: Figure out a way to show why the AVX512 implementation is not twice as fast as the AVX2 implementation
 // OPTIONAL: Figure out what the max memory throughput is
 
@@ -665,7 +666,7 @@ We want to see how big the performance impact of distributing over multiple node
 :vega-lite-filename: processed-assets/lgca-multiple-nodes-comparison.vl.json
 include::scripts/vega-chart.adoc[]
 
-The chart shows that the performance roughly doubles when the number of nodes is doubled. The step from one to two nodes seems to be even more extreme, as it nearly triples in value. We suspect that we got a particularly good node for that measurement. Because we always use the whole node exclusively, we must wait a long time until our jobs are run. We could not do ten measurements but only four, which means there can be some variance between the runs.
+The chart shows that the performance roughly doubles when the number of nodes is doubled. The step from one to two nodes seems to be even more extreme, as it nearly triples in value. We suspect that we got a particularly good node for that measurement. Because we always use the whole node exclusively, we must wait a long time until our jobs are run. We did ten runs for the tests with one node and 5 runs with 2 and 4 nodes.
 
 We analyzed the speedup and efficiency of distributing over multiple machines in <<speedup-efficiency>>. The speedup is the performance gain compared to a single node. Efficiency is the performance gain in relation to the resources used. 
 
@@ -678,7 +679,7 @@ It is interesting to see that the efficiency for 2 and 4 nodes is actually highe
 
 == Results
 
-We were able to implement a fast and scalable simulation of the LGCA. We were able to scale the simulation over multiple nodes and got a near-linear speedup for 4 nodes. We were also able to scale the simulation over multiple threads, where we achieved linear speedup as well. Our fastest run (4 nodes, 48 tasks per node) was able to process 492 Gigabytes of data per second, which is nearly half the theoretical maximum set by the memory bandwidth of 1126Gb/s (140Gb/s * 2 sockets * 4 nodes).
+We were able to implement a fast and scalable simulation of the LGCA. We were able to scale the simulation over multiple nodes and got a near-linear speedup for 4 nodes. We were also able to scale the simulation over multiple threads, where we achieved linear speedup as well. Our fastest run (4 nodes, 48 tasks per node) was able to *process 492 Gigabytes per second*  of data, which is nearly half the theoretical maximum set by the memory bandwidth of 1126GB/s (140GB/s * 2 sockets * 4 nodes).
 
 [glossary]
 == List of abbreviations
@@ -687,9 +688,9 @@ We were able to implement a fast and scalable simulation of the LGCA. We were ab
 // Abbreviations in random order and links to read more about them
 [glossary]
 [[LGCA]]LGCA:: Lattice gas cellular automaton link:pass:[https://en.wikipedia.org/wiki/Lattice_gas_automaton][🔗^]
-[[AVX512]]AVX512:: Advanced Vector Extensions 512 for x86 link::pass:[https://en.wikichip.org/wiki/x86/avx-512][🔗^]
-[[SMT]]SMT:: Simultaneous multithreading link::pass:[https://en.wikipedia.org/wiki/Simultaneous_multithreading][🔗^]
-[[SIMD]]SIMD:: Single instruction, multiple data link::pass:[https://en.wikipedia.org/wiki/Single_instruction,_multiple_data][🔗^]
+[[AVX512]]AVX512:: Advanced Vector Extensions 512 for x86 link:pass:[https://en.wikichip.org/wiki/x86/avx-512][🔗^]
+[[SMT]]SMT:: Simultaneous multithreading link:pass:[https://en.wikipedia.org/wiki/Simultaneous_multithreading][🔗^]
+[[SIMD]]SIMD:: Single instruction, multiple data link:pass:[https://en.wikipedia.org/wiki/Single_instruction,_multiple_data][🔗^]
 
 == Appendix
 

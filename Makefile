@@ -57,7 +57,7 @@ paper.css: $(SCSS_FILES)
 %-web-preview: %.html
 	$(PYTHON) scripts/serve.py $<
 
-%.pdf: %.adoc paper.css $(TARGETS_WITHOUT_HTML) $(PROCESSED_CHARTS)
+%.pdf: %.adoc paper.css data-kickoff data-sorting data-lgca $(TARGETS_WITHOUT_HTML) $(PROCESSED_CHARTS)
 	$(ASCIIDOCTOR_WEB_PDF) $< -o $@
 
 %-preview: %.adoc paper.css $(TARGETS_WITHOUT_HTML) $(PROCESSED_CHARTS)

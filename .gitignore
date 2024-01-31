@@ -1,1 +1,6 @@
 target
+report*.html
+.sass-cache
+paper.css
+processed-assets
+images
